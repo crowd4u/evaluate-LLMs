@@ -24,41 +24,60 @@ The results are saved in `results/{group_id}` directory.
 The result data in `.piclke` file.
 ```json
 {
-    "properties": {
-      "args": {
-        "type": "object"
-      },
-      "result": {
-"elements": {
-  "type": "object",
   "properties": {
-    "class label": {
+    "start_time": {
+      "type": "number"
+    },
+    "finish_time": {
+      "type": "number"
+    },
+    "experiment_id": {
       "type": "string"
     },
-    "TP": {
-      "type": "number"
+    "args": {
+      "type": "object"
     },
-    "FP": {
-      "type": "number"
-    },
-    "FN": {
-      "type": "number"
-    },
-    "TN": {
-      "type": "number"
-    },
-    "precision": {
-      "type": "number"
-    },
-    "accuracy": {
-      "type": "number"
-    },
-    "n_samples": {
-      "type": "number"
-    }
-  }
-}
+    "result": {
+      "elements": {
+        "type": "object",
+        "properties": {
+          "class label": {
+            "type": "string"
+          },
+          "positive_examples": {
+            "elements": {
+              "type": "string"
+            }
+          },
+          "negative_examples": {
+            "elements": {
+              "type": "string"
+            }
+          },
+          "TP": {
+            "type": "number"
+          },
+          "FP": {
+            "type": "number"
+          },
+          "FN": {
+            "type": "number"
+          },
+          "TN": {
+            "type": "number"
+          },
+          "precision": {
+            "type": "number"
+          },
+          "accuracy": {
+            "type": "number"
+          },
+          "n_samples": {
+            "type": "number"
+          }
+        }
       }
     }
+  }
 }
 ```

@@ -42,6 +42,13 @@ n_sample_range = range(args.n_sample_from, args.n_sample_to + 1, args.n_sample_s
 
 result = []
 
+
+def get_timestamp():
+    return str(time.time()).split('.')[0]
+
+
+start_time_seconds = get_timestamp()
+
 for n_sample in n_sample_range:
     if args.logging:
         logging.info(f"sample number: {n_sample}")
@@ -62,7 +69,11 @@ file_name = f"dbpedia_14-{datetime}_{ex_id}.pickle"
 os.makedirs(f"./results/{args.group_id}/", exist_ok=True)
 
 with open(f"./results/{args.group_id}/{file_name}", "wb") as f:
+    finish_time_seconds = get_timestamp()
     save_data = {
+        "start_time": start_time_seconds,
+        "finish_time": finish_time_seconds,
+        "experiment_id": ex_id,
         "args": args,
         "result": result
     }

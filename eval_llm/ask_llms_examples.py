@@ -85,6 +85,8 @@ def ask_positive_and_negative_for_class(chat: ChatOpenAI, dataset, n_sample: int
 
         tmp_result.append({
             "class label": label,
+            "positive examples": positive_examples,
+            "negative examples": negative_examples,
             "TP": TP,
             "FP": FP,
             "FN": FN,
