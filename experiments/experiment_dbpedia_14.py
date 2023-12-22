@@ -8,7 +8,8 @@ import sys
 
 import argparse
 from langchain.chat_models import ChatOpenAI
-from langchain.schema import HumanMessage
+from langchain.llms.fake import FakeListLLM
+from langchain.prompts import ChatMessagePromptTemplate
 from datasets import load_dataset
 from dotenv import load_dotenv
 
@@ -27,12 +28,22 @@ parser.add_argument("--n_sample_step", default=5, type=int, help="Number of samp
 parser.add_argument("--model", default="gpt-3.5-turbo", type=str, help="Model name", choices=["gpt-3.5-turbo"])
 parser.add_argument("--logging", default=True, type=bool, help="Logging to stdout")
 parser.add_argument("--max_retry", default=3, type=int, help="Max retry to invoke llms")
+parser.add_argument("--test", default=False, type=bool, help="Test mode")
 args = parser.parse_args()
 
-chat = ChatOpenAI(model=args.model)
+is_test = args.test
+chat = None
+if is_test:
+    chat = FakeListLLM(responses=['["yes"]', '["no"]'])
+    if args.logging:
+        logging.info("Test mode")
+else:
+    chat = ChatOpenAI(model=args.model)
 
-query_positive = HumanMessage(content="Please pick up some examples of {}. You need to pick up {} examples.")
-query_negative = HumanMessage(content="Please pick up some examples which are not {}. You need to pick up {} examples.")
+query_positive = "Please pick up some examples of {label}. You need to pick up {n_examples} examples."
+pos_q_template = ChatMessagePromptTemplate.from_template(role="Human", template=query_positive)
+query_negative = "Please pick up some examples which are not {label}. You need to pick up {n_examples} examples."
+neg_q_template = ChatMessagePromptTemplate.from_template(role="Human", template=query_negative)
 
 ds_wiki = load_dataset("dbpedia_14", split="train")
 n_label = len(ds_wiki.features["label"].names)
@@ -55,7 +66,7 @@ for n_sample in n_sample_range:
     for trial_iter in range(1, n_trials+1):
         if args.logging:
             logging.info(f"trial: {trial_iter}/{n_trials}")
-        res = ask_positive_and_negative_for_class(chat, ds_wiki, n_sample, query_positive, query_negative,
+        res = ask_positive_and_negative_for_class(chat, ds_wiki, n_sample, pos_q_template, neg_q_template,
                                                   max_retry=args.max_retry)
         if len(res) != n_label:
             if args.logging:
@@ -66,9 +77,11 @@ for n_sample in n_sample_range:
 ex_id = hashlib.md5(str(args).encode()).hexdigest()
 datetime = time.strftime("%Y%m%d%H%M%S")
 file_name = f"dbpedia_14-{datetime}_{ex_id}.pickle"
-os.makedirs(f"./results/{args.group_id}/", exist_ok=True)
+file_path = "./results/test/" if is_test else "./results/"
+file_path += args.group_id + "/"
+os.makedirs(file_path, exist_ok=True)
 
-with open(f"./results/{args.group_id}/{file_name}", "wb") as f:
+with open(file_path + file_name, "wb") as f:
     finish_time_seconds = get_timestamp()
     save_data = {
         "start_time": start_time_seconds,
