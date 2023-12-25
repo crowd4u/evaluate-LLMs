@@ -15,9 +15,12 @@ from dotenv import load_dotenv
 
 sys.path.append(str(Path(__file__).parent.parent))
 from eval_llm.ask_llms_examples import ask_positive_and_negative_for_class
+from eval_llm.check_by_themselves import check_by_themselves
 
 
 load_dotenv()
+
+strategy_list = ["check_by_dataset", "check_by_themselves"]
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--group_id", default="default", type=str, help="Group ID of the experiment")
@@ -29,8 +32,14 @@ parser.add_argument("--model", default="gpt-3.5-turbo", type=str, help="Model na
 parser.add_argument("--logging", default=True, type=bool, help="Logging to stdout")
 parser.add_argument("--max_retry", default=3, type=int, help="Max retry to invoke llms")
 parser.add_argument("--test", default=False, type=bool, help="Test mode")
+parser.add_argument("--strategy", default="check_by_dataset", type=str, help="Strategy to ask llms",
+                    choices=strategy_list)
 args = parser.parse_args()
 
+if args.logging:
+    print("options", args)
+
+strategy = args.strategy
 is_test = args.test
 chat = None
 if is_test:
@@ -41,9 +50,9 @@ else:
     chat = ChatOpenAI(model=args.model)
 
 query_positive = "Please pick up some examples of {label}. You need to pick up {n_examples} examples."
-pos_q_template = ChatMessagePromptTemplate.from_template(role="Human", template=query_positive)
+pos_q_template = ChatMessagePromptTemplate.from_template(role="user", template=query_positive)
 query_negative = "Please pick up some examples which are not {label}. You need to pick up {n_examples} examples."
-neg_q_template = ChatMessagePromptTemplate.from_template(role="Human", template=query_negative)
+neg_q_template = ChatMessagePromptTemplate.from_template(role="user", template=query_negative)
 
 ds_wiki = load_dataset("dbpedia_14", split="train")
 n_label = len(ds_wiki.features["label"].names)
@@ -66,8 +75,15 @@ for n_sample in n_sample_range:
     for trial_iter in range(1, n_trials+1):
         if args.logging:
             logging.info(f"trial: {trial_iter}/{n_trials}")
-        res = ask_positive_and_negative_for_class(chat, ds_wiki, n_sample, pos_q_template, neg_q_template,
-                                                  max_retry=args.max_retry)
+        res = []
+        if strategy == "check_by_dataset":
+            res = ask_positive_and_negative_for_class(chat, ds_wiki, n_sample, pos_q_template, neg_q_template,
+                                                      max_retry=args.max_retry)
+        elif strategy == "check_by_themselves":
+            res = check_by_themselves(chat, ds_wiki, n_sample, pos_q_template, neg_q_template,
+                                      max_retry=args.max_retry)
+        else:
+            raise ValueError(f"strategy {strategy} is not supported")
         if len(res) != n_label:
             if args.logging:
                 logging.info(f"trial: {trial_iter}/{n_trials} partly failed; {len(res)}/{n_label}")

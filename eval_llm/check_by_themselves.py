@@ -7,25 +7,32 @@ default_system_message = SystemMessage(
     content='''You should answer with the literal of list of python. For example, ["example1", "example's 2", "3 examples"].'''
 )
 
-
-vefiication_message = "The {item} is a kind of {label}?"
-message_template = ChatMessagePromptTemplate.from_template(role="Human", template=vefiication_message)
+verification_message = "The {item} is a kind of {label}?"
+verification_template = ChatMessagePromptTemplate.from_template(role="Human", template=verification_message)
 
 
 def check_by_themselves(chat: ChatOpenAI, dataset, n_sample: int,
-                                        positive_message: ChatMessagePromptTemplate,
-                                        negative_message: ChatMessagePromptTemplate,
-                                        system_message: SystemMessage = default_system_message,
-                                        max_retry: int = 3
-                                        ) -> list[dict]:
+                        positive_message: ChatMessagePromptTemplate,
+                        negative_message: ChatMessagePromptTemplate,
+                        system_message: SystemMessage = default_system_message,
+                        verification_template: ChatMessagePromptTemplate = verification_template,
+                        max_retry: int = 3
+                        ) -> list[dict]:
     """
     ask llms to positive and negative examples for a class
 
     :param chat:
     :param dataset: should be a dataset with label feature. (loaded from datasets.load_dataset)
     :param n_sample:
-    :param positive_message: message to ask llms to generate examples. With two {}, the first to be replaced by label to ask, the second to be replaced by number of examples.
-    :param negative_message: message to ask llms to generate examples. With two {} to be replaced by label to ask, the second to be replaced by number of examples.
+    :param positive_message: message to ask llms to generate examples.
+        With two {}, the first to be replaced by label to ask, the second to be replaced by number of examples.
+        For example: "Please pick up some examples of {label}. You need to pick up {n_examples} examples."
+        The role should be "user".
+    :param negative_message: message to ask llms to generate examples.
+        With two {} to be replaced by label to ask, the second to be replaced by number of examples.
+        For example: "Please pick up some examples which are not {label}. You need to pick up {n_examples} examples."
+        The role should be "user".
+    :param verification_template: message to ask llms to verify examples.
     :param system_message: system message to ask llms to generate examples. With {} to be replaced by number of examples.
     :param max_retry: max retry to invoke llms
     :return: list of dict
@@ -39,21 +46,22 @@ def check_by_themselves(chat: ChatOpenAI, dataset, n_sample: int,
     for class_idx, label in enumerate(classlabel_list):
         cluster: list[str] = [x["title"] for x in dataset if x["label"] == class_idx]
         print("class label: ", label)
-        positive_query = [system_message, HumanMessage(content=positive_message.content.format(label, n_sample))]
+        positive_query = [system_message, positive_message.format(label=label, n_examples=n_sample)]
         positive_examples = []
         for _ in range(max_retry):
             try:
                 ai_res = chat.invoke(positive_query)
+                print("AI response", ai_res)
                 positive_examples = eval(ai_res.content)
                 break
             except Exception as e:
-                # print(e)
+                print(e)
                 pass
         if len(positive_examples) == 0:
             print("positive examples is empty in class: ", label)
             continue
 
-        negative_query = [system_message, HumanMessage(content=negative_message.content.format(label, n_sample))]
+        negative_query = [system_message, negative_message.format(label=label, n_examples=n_sample)]
         negative_examples = []
         for _ in range(max_retry):
             try:
@@ -65,40 +73,59 @@ def check_by_themselves(chat: ChatOpenAI, dataset, n_sample: int,
         if len(negative_examples) == 0:
             print("negative examples is empty in class: ", label)
 
-        for example in positive_examples:
-            answer = ""
-            for _ in range(max_retry):
-                try:
-                    ai_res = chat.invoke([system_message, HumanMessage(content="example")])
-                    answer = ai_res.content
-                    break
-                except:
-                    pass
-            if "yes" in answer:
-                print("answer is empty in class: ", label)
-                continue
-            tmp_result.append({
-                "class": label,
-                "example": example,
-                "answer": answer
-            })
+        TP = verification_by_themselves(chat, positive_examples, label, "Yes", system_message, verification_template,
+                                        max_retry)
+        TN = verification_by_themselves(chat, negative_examples, label, "No", system_message, verification_template,
+                                        max_retry)
+        FP = n_sample - TP
+        FN = n_sample - TN
 
-        for example in negative_examples:
-            answer = ""
-            for _ in range(max_retry):
-                try:
-                    ai_res = chat.invoke([system_message, HumanMessage(content="example")])
-                    answer = ai_res.content
-                    break
-                except:
-                    pass
-            if "yes" in answer:
-                print("answer is empty in class: ", label)
-                continue
-            tmp_result.append({
-                "class": label,
-                "example": example,
-                "answer": answer
-            })
+        tmp_result.append({
+            "class label": label,
+            "TP": TP,
+            "TN": TN,
+            "FP": FP,
+            "FN": FN,
+            "precision": TP / (TP + FP),
+            "negative examples": negative_examples,
+            "positive examples": positive_examples,
+            "accuracy": (TP + TN) / (TP + TN + FP + FN),
+            "n_samples": n_sample,
+        })
 
     return tmp_result
+
+
+system_message_for_verification = SystemMessage(content="Please answer with Yes or No.")
+
+
+def verification_by_themselves(chat: ChatOpenAI, target_items: list[str], label: str,
+                               judge_str: str = "Yes",
+                               system_query: SystemMessage = system_message_for_verification,
+                               query_template: ChatMessagePromptTemplate = verification_template,
+                               max_retry: int = 3) -> int:
+    """
+    ask llms to verify examples
+    :param chat:
+    :param target_items:
+    :param label:
+    :param judge_str: if the answer of llms contains judge_str, it is judged as correct.
+    :param system_query:
+    :param query_template:
+    :param max_retry: number of retry to invoke llms.
+    :return: number of examples which are judged as judge_str
+    """
+    count = 0
+    for item in target_items:
+        answer = ""
+        for _ in range(max_retry):
+            try:
+                ai_res = chat.invoke([system_query, query_template.format(item=item, label=label)])
+                print("AI response", ai_res)
+                answer = ai_res.content
+                break
+            except:
+                pass
+        if judge_str.lower() in answer.lower():
+            count += 1
+    return count

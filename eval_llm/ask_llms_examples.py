@@ -24,13 +24,13 @@ def ask_positive_and_negative_for_class(chat: ChatOpenAI, dataset, n_sample: int
     :param dataset: should be a dataset with label feature. (loaded from datasets.load_dataset)
     :param n_sample:
     :param positive_message_template: message to ask llms to generate examples.
-    With two {}, the first to be replaced by label to ask, the second to be replaced by number of examples.
-    For example: "Please pick up some examples of {label}. You need to pick up {n_examples} examples."
-    The role should be "Human".
+        With two {}, the first to be replaced by label to ask, the second to be replaced by number of examples.
+        For example: "Please pick up some examples of {label}. You need to pick up {n_examples} examples."
+        The role should be "user".
     :param negative_message_template: message to ask llms to generate examples.
-    With two {} to be replaced by label to ask, the second to be replaced by number of examples.
-    For example: "Please pick up some examples which are not {label}. You need to pick up {n_examples} examples."
-    The role should be "Human".
+        With two {} to be replaced by label to ask, the second to be replaced by number of examples.
+        For example: "Please pick up some examples which are not {label}. You need to pick up {n_examples} examples."
+        The role should be "user".
     :param system_message: system message to ask llms to generate examples. With {} to be replaced by number of examples.
     :param max_retry: max retry to invoke llms
     :return: list of dict
