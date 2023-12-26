@@ -41,7 +41,7 @@ def check_by_themselves(chat: ChatOpenAI, dataset, n_sample: int,
     system_message = SystemMessage(content=system_message.content.format(n_sample))
 
     tmp_result = []
-    print("sample number: ", n_sample)
+    # print("sample number: ", n_sample)
     for class_idx, label in enumerate(classlabel_list):
         cluster: list[str] = [x["title"] for x in dataset if x["label"] == class_idx]
         print("class label: ", label)
@@ -50,7 +50,7 @@ def check_by_themselves(chat: ChatOpenAI, dataset, n_sample: int,
         for _ in range(max_retry):
             try:
                 ai_res = chat.invoke(positive_query)
-                print("AI response", ai_res)
+                # print("AI response", ai_res)
                 positive_examples = eval(ai_res.content)
                 break
             except Exception as e:
@@ -123,11 +123,11 @@ def verification_by_themselves(chat: ChatOpenAI, target_items: list[str], label:
         for _ in range(max_retry):
             try:
                 ai_res = chat.invoke([system_query, query_template.format(item=item, label=label)])
-                print("AI response in verification", ai_res)
+                # print("AI response in verification", ai_res)
                 answer = ai_res.content
                 break
             except Exception as e:
-                print("error in verification", e)
+                # print("error in verification", e)
                 pass
         if judge_str.lower() in answer.lower():
             count += 1
