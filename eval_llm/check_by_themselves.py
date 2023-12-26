@@ -2,20 +2,19 @@ from langchain.chat_models import ChatOpenAI
 from langchain.schema import SystemMessage, HumanMessage
 from langchain.prompts import ChatMessagePromptTemplate
 
-
 default_system_message = SystemMessage(
     content='''You should answer with the literal of list of python. For example, ["example1", "example's 2", "3 examples"].'''
 )
 
 verification_message = "The {item} is a kind of {label}?"
-verification_template = ChatMessagePromptTemplate.from_template(role="Human", template=verification_message)
+verification_template = ChatMessagePromptTemplate.from_template(role="user", template=verification_message)
 
 
 def check_by_themselves(chat: ChatOpenAI, dataset, n_sample: int,
                         positive_message: ChatMessagePromptTemplate,
                         negative_message: ChatMessagePromptTemplate,
                         system_message: SystemMessage = default_system_message,
-                        verification_template: ChatMessagePromptTemplate = verification_template,
+                        verification_message_template: ChatMessagePromptTemplate = verification_template,
                         max_retry: int = 3
                         ) -> list[dict]:
     """
@@ -32,7 +31,7 @@ def check_by_themselves(chat: ChatOpenAI, dataset, n_sample: int,
         With two {} to be replaced by label to ask, the second to be replaced by number of examples.
         For example: "Please pick up some examples which are not {label}. You need to pick up {n_examples} examples."
         The role should be "user".
-    :param verification_template: message to ask llms to verify examples.
+    :param verification_message_template: message to ask llms to verify examples.
     :param system_message: system message to ask llms to generate examples. With {} to be replaced by number of examples.
     :param max_retry: max retry to invoke llms
     :return: list of dict
@@ -73,10 +72,12 @@ def check_by_themselves(chat: ChatOpenAI, dataset, n_sample: int,
         if len(negative_examples) == 0:
             print("negative examples is empty in class: ", label)
 
-        TP = verification_by_themselves(chat, positive_examples, label, "Yes", system_message, verification_template,
-                                        max_retry)
-        TN = verification_by_themselves(chat, negative_examples, label, "No", system_message, verification_template,
-                                        max_retry)
+        TP = verification_by_themselves(chat, positive_examples, label, "Yes",
+                                        query_template=verification_message_template,
+                                        max_retry=max_retry)
+        TN = verification_by_themselves(chat, negative_examples, label, "No",
+                                        query_template=verification_message_template,
+                                        max_retry=max_retry)
         FP = n_sample - TP
         FN = n_sample - TN
 
@@ -96,7 +97,7 @@ def check_by_themselves(chat: ChatOpenAI, dataset, n_sample: int,
     return tmp_result
 
 
-system_message_for_verification = SystemMessage(content="Please answer with Yes or No.")
+system_message_for_verification = SystemMessage(content="Please answer with 'Yes' or 'No', without no other words.")
 
 
 def verification_by_themselves(chat: ChatOpenAI, target_items: list[str], label: str,
@@ -111,7 +112,8 @@ def verification_by_themselves(chat: ChatOpenAI, target_items: list[str], label:
     :param label:
     :param judge_str: if the answer of llms contains judge_str, it is judged as correct.
     :param system_query:
-    :param query_template:
+    :param query_template: message to ask llms to verify examples. With two {} to be replaced by item and label.
+        For example: "The {item} is a kind of {label}?"
     :param max_retry: number of retry to invoke llms.
     :return: number of examples which are judged as judge_str
     """
@@ -121,10 +123,11 @@ def verification_by_themselves(chat: ChatOpenAI, target_items: list[str], label:
         for _ in range(max_retry):
             try:
                 ai_res = chat.invoke([system_query, query_template.format(item=item, label=label)])
-                print("AI response", ai_res)
+                print("AI response in verification", ai_res)
                 answer = ai_res.content
                 break
-            except:
+            except Exception as e:
+                print("error in verification", e)
                 pass
         if judge_str.lower() in answer.lower():
             count += 1
