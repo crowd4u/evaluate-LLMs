@@ -20,7 +20,8 @@ from eval_llm.check_by_themselves import check_by_themselves
 
 load_dotenv()
 
-strategy_list = ["check_by_dataset", "check_by_themselves"]
+strategy_list = ["normal", "super"]
+verification_list = ["dataset", "themselves"]
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--group_id", default="default", type=str, help="Group ID of the experiment")
@@ -32,14 +33,17 @@ parser.add_argument("--model", default="gpt-3.5-turbo", type=str, help="Model na
 parser.add_argument("--logging", default=True, type=bool, help="Logging to stdout")
 parser.add_argument("--max_retry", default=3, type=int, help="Max retry to invoke llms")
 parser.add_argument("--test", default=False, type=bool, help="Test mode")
-parser.add_argument("--strategy", default="check_by_dataset", type=str, help="Strategy to ask llms",
+parser.add_argument("--strategy", default="normal", type=str, help="Strategy to ask llms",
                     choices=strategy_list)
+parser.add_argument("--verification", default="dataset", type=str, help="Verification method",
+                    choices=verification_list)
 args = parser.parse_args()
 
 if args.logging:
     print("options", args)
 
-strategy = args.strategy
+verification = args.verification
+
 is_test = args.test
 chat = None
 if is_test:
@@ -50,9 +54,17 @@ else:
     chat = ChatOpenAI(model=args.model)
 
 query_positive = "Please pick up some examples of {label}. You need to pick up {n_examples} examples."
-pos_q_template = ChatMessagePromptTemplate.from_template(role="user", template=query_positive)
 query_negative = "Please pick up some examples which are not {label}. You need to pick up {n_examples} examples."
-neg_q_template = ChatMessagePromptTemplate.from_template(role="user", template=query_negative)
+query_negative_super = "Please pick up some examples which are the superordinate of {label}, but not {label}. You need to pick up {n_examples} examples." # NOQA
+
+if args.strategy == "super":
+    pos_q_template = ChatMessagePromptTemplate.from_template(role="user", template=query_positive)
+    neg_q_template = ChatMessagePromptTemplate.from_template(role="user", template=query_negative_super)
+elif args.strategy == "normal":
+    pos_q_template = ChatMessagePromptTemplate.from_template(role="user", template=query_positive)
+    neg_q_template = ChatMessagePromptTemplate.from_template(role="user", template=query_negative)
+else:
+    raise ValueError(f"strategy: {args.strategy} is not supported")
 
 ds_wiki = load_dataset("dbpedia_14", split="train")
 n_label = len(ds_wiki.features["label"].names)
@@ -67,8 +79,8 @@ def get_timestamp():
     return str(time.time()).split('.')[0]
 
 
+# start experiment
 start_time_seconds = get_timestamp()
-
 for n_sample in n_sample_range:
     if args.logging:
         logging.info(f"sample number: {n_sample}")
@@ -76,14 +88,14 @@ for n_sample in n_sample_range:
         if args.logging:
             logging.info(f"trial: {trial_iter}/{n_trials}")
         res = []
-        if strategy == "check_by_dataset":
+        if verification == "check_by_dataset":
             res = ask_positive_and_negative_for_class(chat, ds_wiki, n_sample, pos_q_template, neg_q_template,
                                                       max_retry=args.max_retry)
-        elif strategy == "check_by_themselves":
+        elif verification == "check_by_themselves":
             res = check_by_themselves(chat, ds_wiki, n_sample, pos_q_template, neg_q_template,
                                       max_retry=args.max_retry)
         else:
-            raise ValueError(f"strategy {strategy} is not supported")
+            raise ValueError(f"the way of verification: {verification} is not supported")
         if len(res) != n_label:
             if args.logging:
                 logging.info(f"trial: {trial_iter}/{n_trials} partly failed; {len(res)}/{n_label}")
