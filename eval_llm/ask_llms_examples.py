@@ -40,10 +40,10 @@ def ask_positive_and_negative_for_class(chat: ChatOpenAI, dataset, n_sample: int
 
     classlabel_list: list[str] = dataset.features["label"].names
 
-    if positive_message_template.role != "Human":
-        raise ValueError("positive_message_template.role should be 'Human'")
-    if negative_message_template.role != "Human":
-        raise ValueError("negative_message_template.role should be 'Human'")
+    if positive_message_template.role != "user":
+        raise ValueError("positive_message_template.role should be 'user'")
+    if negative_message_template.role != "user":
+        raise ValueError("negative_message_template.role should be 'user'")
 
     tmp_result = []
     # print("sample number: ", n_sample)
