@@ -88,10 +88,10 @@ for n_sample in n_sample_range:
         if args.logging:
             logging.info(f"trial: {trial_iter}/{n_trials}")
         res = []
-        if verification == "check_by_dataset":
+        if verification == "dataset":
             res = ask_positive_and_negative_for_class(chat, ds_wiki, n_sample, pos_q_template, neg_q_template,
                                                       max_retry=args.max_retry)
-        elif verification == "check_by_themselves":
+        elif verification == "themselves":
             res = check_by_themselves(chat, ds_wiki, n_sample, pos_q_template, neg_q_template,
                                       max_retry=args.max_retry)
         else:
