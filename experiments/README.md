@@ -14,6 +14,11 @@ cd experiments
 python experiment_dbpedia_14.py
 ```
 
+#### Examples
+```bash
+nohup parallel 'python3 experiment_dbpedia_14.py --group_id dbpedia_14_1 --n_sample_from 5 --n_sample_to 25 --n_trials 10 --verification {} --strategy {}' ::: normal super ::: check_by_themselves check_by_dataset &
+```
+
 ### Options
 You can change the following options in `experiment_dbpedia_14.py`:
 

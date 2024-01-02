@@ -51,7 +51,7 @@ if is_test:
     if args.logging:
         logging.info("Test mode")
 else:
-    chat = ChatOpenAI(model=args.model)
+    chat = ChatOpenAI(model=args.model, max_retries=args.max_retry)
 
 query_positive = "Please pick up some examples of {label}. You need to pick up {n_examples} examples."
 query_negative = "Please pick up some examples which are not {label}. You need to pick up {n_examples} examples."

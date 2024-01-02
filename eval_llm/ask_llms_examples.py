@@ -1,4 +1,4 @@
-from utils import in_the_list
+from eval_llm.utils.utils import in_the_list
 
 from langchain.chat_models import ChatOpenAI
 from langchain.llms.fake import FakeListLLM
