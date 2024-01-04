@@ -72,12 +72,15 @@ def check_by_themselves(chat: ChatOpenAI, dataset, n_sample: int,
         if len(negative_examples) == 0:
             print("negative examples is empty in class: ", label)
 
-        TP = verification_by_themselves(chat, positive_examples, label, "Yes",
+        positive_verifications = verification_by_themselves(chat, positive_examples, label, "Yes",
                                         query_template=verification_message_template,
                                         max_retry=max_retry)
-        TN = verification_by_themselves(chat, negative_examples, label, "No",
+        negative_verifications = verification_by_themselves(chat, negative_examples, label, "No",
                                         query_template=verification_message_template,
                                         max_retry=max_retry)
+        # TP is a number of the True in the positive_verifications
+        TP = sum(positive_verifications)
+        TN = sum(negative_verifications)
         FP = n_sample - TP
         FN = n_sample - TN
 
@@ -104,7 +107,7 @@ def verification_by_themselves(chat: ChatOpenAI, target_items: list[str], label:
                                judge_str: str = "Yes",
                                system_query: SystemMessage = system_message_for_verification,
                                query_template: ChatMessagePromptTemplate = verification_template,
-                               max_retry: int = 3) -> int:
+                               max_retry: int = 3) -> list[bool]:
     """
     ask llms to verify examples
     :param chat:
@@ -115,9 +118,9 @@ def verification_by_themselves(chat: ChatOpenAI, target_items: list[str], label:
     :param query_template: message to ask llms to verify examples. With two {} to be replaced by item and label.
         For example: "The {item} is a kind of {label}?"
     :param max_retry: number of retry to invoke llms.
-    :return: number of examples which are judged as judge_str
+    :return: result: list of bool
     """
-    count = 0
+    result: list[bool] = []
     for item in target_items:
         answer = ""
         for _ in range(max_retry):
@@ -129,6 +132,44 @@ def verification_by_themselves(chat: ChatOpenAI, target_items: list[str], label:
             except Exception as e:
                 # print("error in verification", e)
                 pass
-        if judge_str.lower() in answer.lower():
-            count += 1
-    return count
+        result.append(judge_str.lower() in answer.lower())
+    return result
+
+
+bulk_verification_system_message = SystemMessage(
+    content='''
+    You should answer with the literal of list of python and its contents should be `bool` value.
+    For example, [True, True, False, True, False].'''
+)
+bulk_verification_user_message = """The items in the following list are a kind of {label}?
+list: {list}
+"""
+bulk_verification_template = HumanMessage(content=bulk_verification_user_message)
+
+
+def bulk_verification_by_themselves(chat: ChatOpenAI, target_items: list[str], label: str,
+                                    judge_str: str = "Yes",
+                                    system_query: SystemMessage = bulk_verification_system_message,
+                                    query_template: ChatMessagePromptTemplate = bulk_verification_template,
+                                    max_retry: int = 3) -> list[bool]:
+    """
+    ask llms to verify examples (ask at one time)
+    :param chat:
+    :param target_items:
+    :param label:
+    :param judge_str: if the answer of llms contains judge_str, it is judged as correct.
+    :param system_query:
+    :param query_template: message to ask llms to verify examples. With two {} to be replaced by label and list.
+    :param max_retry: number of retry to invoke llms.
+    :return: list of bool
+    """
+    result = []
+    for _ in range(max_retry):
+        try:
+            ai_res = chat.invoke([system_query, query_template.format(
+                label=label, list=str(target_items)
+            )])
+            result = eval(ai_res.content)
+        except Exception as e:
+            pass
+    return result
