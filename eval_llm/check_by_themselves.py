@@ -51,7 +51,10 @@ def check_by_themselves(chat: ChatOpenAI, dataset, n_sample: int,
             try:
                 ai_res = chat.invoke(positive_query)
                 # print("AI response", ai_res)
-                positive_examples = eval(ai_res.content)
+                if isinstance(ai_res, str):
+                    positive_examples = eval(ai_res)
+                else:
+                    positive_examples = eval(ai_res.content)
                 break
             except Exception as e:
                 print(e)
@@ -65,7 +68,10 @@ def check_by_themselves(chat: ChatOpenAI, dataset, n_sample: int,
         for _ in range(max_retry):
             try:
                 ai_res = chat.invoke(negative_query)
-                negative_examples = eval(ai_res.content)
+                if isinstance(ai_res, str):
+                    negative_examples = eval(ai_res)
+                else:
+                    negative_examples = eval(ai_res.content)
                 break
             except:
                 pass
@@ -127,7 +133,10 @@ def verification_by_themselves(chat: ChatOpenAI, target_items: list[str], label:
             try:
                 ai_res = chat.invoke([system_query, query_template.format(item=item, label=label)])
                 # print("AI response in verification", ai_res)
-                answer = ai_res.content
+                if isinstance(ai_res, str):
+                    answer = ai_res
+                else:
+                    answer = ai_res.content
                 break
             except Exception as e:
                 # print("error in verification", e)
@@ -169,7 +178,10 @@ def bulk_verification_by_themselves(chat: ChatOpenAI, target_items: list[str], l
             ai_res = chat.invoke([system_query, query_template.format(
                 label=label, list=str(target_items)
             )])
-            result = eval(ai_res.content)
+            if isinstance(ai_res, str):
+                result = eval(ai_res)
+            else:
+                result = eval(ai_res.content)
         except Exception as e:
             pass
     return result
