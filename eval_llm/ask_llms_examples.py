@@ -1,17 +1,23 @@
-from eval_llm.utils.utils import in_the_list
-
+from langchain_core.language_models.base import BaseLanguageModel
 from langchain.chat_models import ChatOpenAI
+from langchain.llms import OpenAI
 from langchain.llms.fake import FakeListLLM
 from langchain.schema import SystemMessage
 from langchain.prompts import ChatMessagePromptTemplate
 
+import sys
+from pathlib import Path
+sys.path.append(str(Path(__file__).parent.parent))
+from eval_llm.utils.utils import in_the_list, invoke_completion, invoke_chat
+
+
 default_system_message = SystemMessage(
-    content='''You should answer with the literal of list of python. For example, ["example1", "example's 2", "3 examples"].'''
+    content='''You should answer with the literal of list of Python with all string item. For example, ["example1", "example's 2", "3 examples"].'''
 )
 
 
 # ask openai api to generate negative examples
-def ask_positive_and_negative_for_class(chat: ChatOpenAI, dataset, n_sample: int,
+def ask_positive_and_negative_for_class(llm: BaseLanguageModel, dataset, n_sample: int,
                                         positive_message_template: ChatMessagePromptTemplate,
                                         negative_message_template: ChatMessagePromptTemplate,
                                         system_message: SystemMessage = default_system_message,
@@ -20,7 +26,7 @@ def ask_positive_and_negative_for_class(chat: ChatOpenAI, dataset, n_sample: int
     """
     ask llms to positive and negative examples for a class
 
-    :param chat:
+    :param llm:
     :param dataset: should be a dataset with label feature. (loaded from datasets.load_dataset)
     :param n_sample:
     :param positive_message_template: message to ask llms to generate examples.
@@ -35,7 +41,7 @@ def ask_positive_and_negative_for_class(chat: ChatOpenAI, dataset, n_sample: int
     :param max_retry: max retry to invoke llms
     :return: list of dict
     """
-    if isinstance(chat, FakeListLLM):
+    if isinstance(llm, FakeListLLM):
         print("FakeListLLM is used: running in test mode.")
 
     classlabel_list: list[str] = dataset.features["label"].names
@@ -53,33 +59,31 @@ def ask_positive_and_negative_for_class(chat: ChatOpenAI, dataset, n_sample: int
         positive_query = [system_message, positive_message_template.format(label=label, n_examples=n_sample)]
         # print("query:", positive_query)
         positive_examples = []
-        for _ in range(max_retry):
-            try:
-                ai_res = chat.invoke(positive_query)
-                if isinstance(ai_res, str):
-                    positive_examples = eval(ai_res)
-                else:
-                    positive_examples = eval(ai_res.content)
-                break
-            except Exception as e:
-                # print(e)
-                pass
+
+        if isinstance(llm, FakeListLLM):
+            positive_examples = eval(llm.invoke(positive_query))
+        elif isinstance(llm, ChatOpenAI):
+            positive_examples = invoke_chat(llm, positive_query)
+        elif isinstance(llm, OpenAI):
+            positive_examples = invoke_completion(llm, positive_query)
+        else:
+            raise ValueError(f"llm: {llm} is not supported")
+
         if len(positive_examples) == 0:
             print("positive examples is empty in class: ", label)
             continue
 
         negative_query = [system_message, negative_message_template.format(label=label, n_examples=n_sample)]
         negative_examples = []
-        for _ in range(max_retry):
-            try:
-                ai_res = chat.invoke(negative_query)
-                if isinstance(ai_res, str):
-                    negative_examples = eval(ai_res)
-                else:
-                    negative_examples = eval(ai_res.content)
-                break
-            except:
-                pass
+        if isinstance(llm, FakeListLLM):
+            negative_examples = eval(llm.invoke(negative_query))
+        elif isinstance(llm, ChatOpenAI):
+            negative_examples = invoke_chat(llm, negative_query)
+        elif isinstance(llm, OpenAI):
+            negative_examples = invoke_completion(llm, negative_query)
+        else:
+            raise ValueError(f"llm: {llm} is not supported")
+
         if len(negative_examples) == 0:
             print("negative examples is empty in class: ", label)
             continue

@@ -7,7 +7,7 @@ from pathlib import Path
 import sys
 
 import argparse
-from langchain.chat_models import ChatOpenAI
+from langchain.llms import OpenAI
 from langchain.llms.fake import FakeListLLM
 from langchain.prompts import ChatMessagePromptTemplate
 from datasets import load_dataset
@@ -29,7 +29,7 @@ parser.add_argument("--n_trials", default=1, type=int, help="Number of trials")
 parser.add_argument("--n_sample_from", default=5, type=int, help="Number of samples from")
 parser.add_argument("--n_sample_to", default=5, type=int, help="Number of samples to")
 parser.add_argument("--n_sample_step", default=5, type=int, help="Number of samples step")
-parser.add_argument("--model", default="gpt-3.5-turbo", type=str, help="Model name", choices=["gpt-3.5-turbo"])
+parser.add_argument("--model", default="gpt-3.5-turbo-instruct", type=str, help="Model name", choices=["gpt-3.5-turbo-instruct"])
 parser.add_argument("--logging", default=True, type=bool, help="Logging to stdout")
 parser.add_argument("--max_retry", default=3, type=int, help="Max retry to invoke llms")
 parser.add_argument("--test", default=False, type=bool, help="Test mode")
@@ -45,13 +45,13 @@ if args.logging:
 verification = args.verification
 
 is_test = args.test
-chat = None
+llm = None
 if is_test:
-    chat = FakeListLLM(responses=['["yes"]', '["no"]'])
+    llm = FakeListLLM(responses=['["yes"]', '["no"]'])
     if args.logging:
         logging.info("Test mode")
 else:
-    chat = ChatOpenAI(model=args.model, max_retries=args.max_retry)
+    llm = OpenAI(model=args.model, max_retries=args.max_retry)
 
 query_positive = "Please pick up some examples of {label}. You need to pick up {n_examples} examples."
 query_negative = "Please pick up some examples which are not {label}. You need to pick up {n_examples} examples."
@@ -89,10 +89,10 @@ for n_sample in n_sample_range:
             logging.info(f"trial: {trial_iter}/{n_trials}")
         res = []
         if verification == "dataset":
-            res = ask_positive_and_negative_for_class(chat, ds_wiki, n_sample, pos_q_template, neg_q_template,
+            res = ask_positive_and_negative_for_class(llm, ds_wiki, n_sample, pos_q_template, neg_q_template,
                                                       max_retry=args.max_retry)
         elif verification == "themselves":
-            res = check_by_themselves(chat, ds_wiki, n_sample, pos_q_template, neg_q_template,
+            res = check_by_themselves(llm, ds_wiki, n_sample, pos_q_template, neg_q_template,
                                       max_retry=args.max_retry)
         else:
             raise ValueError(f"the way of verification: {verification} is not supported")
