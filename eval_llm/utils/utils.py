@@ -29,9 +29,9 @@ def invoke_completion(model: OpenAI, prompt: list[BaseMessage], max_retry: int =
     tmp_result = []
     for _ in range(max_retry):
         try:
-            print("prompt", combine_prompt_content(prompt))
+            # print("prompt", combine_prompt_content(prompt))
             ai_res = model.invoke(combine_prompt_content(prompt))
-            print("res", ai_res)
+            # print("res", ai_res)
             if isinstance(ai_res, str):
                 tmp_result = eval(ai_res)
             else:
