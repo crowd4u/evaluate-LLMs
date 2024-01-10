@@ -193,5 +193,11 @@ def bulk_verification_by_themselves(llm: BaseLanguageModel, target_items: list[s
         else:
             raise ValueError(f"llm: {llm} is not supported")
         if isinstance(result, list):
-            break
+            # all item in result must be bool
+            if all([isinstance(x, bool) for x in result]):
+                break
+            else:
+                print("result is not bool list: ", result)
+                print("retry")
+                continue
     return result
