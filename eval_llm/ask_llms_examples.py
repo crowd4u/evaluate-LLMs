@@ -9,11 +9,7 @@ import sys
 from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
 from eval_llm.utils.utils import in_the_list, invoke_completion, invoke_chat
-
-
-default_system_message = SystemMessage(
-    content='''You should answer with the literal of list of Python with all string item. For example, ["example1", "example's 2", "3 examples"].'''
-)
+from eval_llm.queries import default_system_message
 
 
 # ask openai api to generate negative examples

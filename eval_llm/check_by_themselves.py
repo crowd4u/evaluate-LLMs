@@ -2,32 +2,17 @@ from langchain_core.language_models.base import BaseLanguageModel
 from langchain.chat_models import ChatOpenAI
 from langchain.llms.fake import FakeListLLM
 from langchain.llms import OpenAI
-from langchain.schema import SystemMessage, HumanMessage
+from langchain.schema import SystemMessage
 from langchain.prompts import ChatMessagePromptTemplate
 
 import sys
 from pathlib import Path
+
+from eval_llm.queries import default_system_message, verification_template, bulk_verification_system_message, \
+    bulk_verification_template, system_message_for_verification
+
 sys.path.append(str(Path(__file__).parent.parent))
 from eval_llm.utils.utils import invoke_completion, invoke_chat, combine_prompt_content
-
-default_system_message = SystemMessage(
-    content='''You should answer with the literal of list of Python with all string item. For example, ["example1", "example's 2", "3 examples"].'''
-)
-
-verification_message = "The {item} is a kind of {label}?"
-verification_template = ChatMessagePromptTemplate.from_template(role="user", template=verification_message)
-
-bulk_verification_system_message = SystemMessage(
-    content='''
-    You should answer with the literal of list of the programming language, Python and its contents should be list of `bool`.
-    Even when all items are the same answer, you should answer with the list of bool.
-    For example, [True, True, False, True, False], [False, False, False, False, False]
-'''
-)
-bulk_verification_user_message = """The items in the following list are a kind of {label}?
-list: {list}
-"""
-bulk_verification_template = ChatMessagePromptTemplate.from_template(role="user", template=bulk_verification_user_message)
 
 
 def check_by_themselves(llm: BaseLanguageModel, dataset, n_sample: int,
@@ -122,9 +107,6 @@ def check_by_themselves(llm: BaseLanguageModel, dataset, n_sample: int,
         })
 
     return tmp_result
-
-
-system_message_for_verification = SystemMessage(content="Please answer with 'Yes' or 'No', without no other words.")
 
 
 def verification_by_themselves(llm: BaseLanguageModel, target_items: list[str], label: str,

@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 sys.path.append(str(Path(__file__).parent.parent))
 from eval_llm.ask_llms_examples import ask_positive_and_negative_for_class
 from eval_llm.check_by_themselves import check_by_themselves
-from eval_llm.queries import query_positive, query_negative, query_negative_super
+from eval_llm.queries import query_positive, query_negative, query_negative_super, query_topic
 
 
 load_dotenv()
@@ -54,6 +54,9 @@ if is_test:
 else:
     llm = OpenAI(model=args.model, max_retries=args.max_retry)
 
+topic_q_template = ChatMessagePromptTemplate.from_template(role="user", template=query_topic)
+
+
 if args.strategy == "super":
     pos_q_template = ChatMessagePromptTemplate.from_template(role="user", template=query_positive)
     neg_q_template = ChatMessagePromptTemplate.from_template(role="user", template=query_negative_super)
@@ -63,8 +66,7 @@ elif args.strategy == "normal":
 else:
     raise ValueError(f"strategy: {args.strategy} is not supported")
 
-ds_wiki = load_dataset("dbpedia_14", split="train")
-n_label = len(ds_wiki.features["label"].names)
+ds_truthfulqa = load_dataset("truthful_qa", "multiple_choice", split="validation")
 
 n_trials = args.n_trials
 n_sample_range = range(args.n_sample_from, args.n_sample_to + 1, args.n_sample_step)
@@ -75,6 +77,25 @@ result = []
 def get_timestamp():
     return str(time.time()).split('.')[0]
 
+# get labels from model
+labels = []
+for idx, row in enumerate(ds_truthfulqa):
+    question = row["question"]
+    if args.logging:
+        logging.info(f"question: {question}")
+    query = [topic_q_template.format(question=question)]
+    ai_res = llm.invoke(query)
+    topic = ""
+    if isinstance(ai_res, str):
+        ai_res = ai_res
+    else:
+        topic = ai_res.content
+    if args.logging:
+        if topic == "":
+            logging.info("topic is empty")
+        else:
+            logging.info(f"topic: {topic}")
+    ds_truthfulqa[idx]["topic"] = topic
 
 # start experiment
 start_time_seconds = get_timestamp()
@@ -85,23 +106,82 @@ for n_sample in n_sample_range:
         if args.logging:
             logging.info(f"trial: {trial_iter}/{n_trials}")
         res = []
+
+        for idx, row in enumerate(ds_truthfulqa):
+            question = row["question"]
+            if args.logging:
+                logging.info(f"question: {question}")
+            query = [pos_q_template.format(question=question, n_examples=n_sample)]
+            ai_res = llm.invoke(query)
+            positive_examples = []
+            if isinstance(ai_res, str):
+                positive_examples = eval(ai_res)
+            else:
+                positive_examples = eval(ai_res.content)
+            if args.logging:
+                logging.info(f"positive examples: {positive_examples}")
+
+            query = [neg_q_template.format(question=question, n_examples=n_sample)]
+            ai_res = llm.invoke(query)
+            negative_examples = []
+            if isinstance(ai_res, str):
+                negative_examples = eval(ai_res)
+            else:
+                negative_examples = eval(ai_res.content)
+            if args.logging:
+                logging.info(f"negative examples: {negative_examples}")
+
+            # search positive examples in cluster
+            positive_score = 0
+            for example in positive_examples:
+                # check partly match
+                if example in row["choices"]:
+                    positive_score += 1
+                # else:
+                # print(example, " is not in dataset")
+            TP = positive_score
+            FP = n_sample - positive_score
+
+            # search negative examples in cluster
+            negative_score = 0
+            for example in negative_examples:
+                # check partly match
+                if example not in row["choices"]:
+                    negative_score += 1
+                # else:
+                # print(example, " is not in dataset")
+            TN = negative_score
+            FN = n_sample - negative_score
+
+            if args.logging:
+                logging.info(f"TP: {TP}, FP: {FP}, TN: {TN}, FN: {FN}")
+
+            result.append({
+                "question": question,
+                "topic": row["topic"],
+                "choices": row["choices"],
+                "TP": TP,
+                "FP": FP,
+                "TN": TN,
+                "FN": FN,
+                "n_sample": n_sample
+            })
+
         if verification == "dataset":
-            res = ask_positive_and_negative_for_class(llm, ds_wiki, n_sample, pos_q_template, neg_q_template,
+            res = ask_positive_and_negative_for_class(llm, ds_truthfulqa, n_sample, pos_q_template, neg_q_template,
                                                       max_retry=args.max_retry)
         elif verification == "themselves":
-            res = check_by_themselves(llm, ds_wiki, n_sample, pos_q_template, neg_q_template,
+            res = check_by_themselves(llm, ds_truthfulqa, n_sample, pos_q_template, neg_q_template,
                                       max_retry=args.max_retry)
         else:
             raise ValueError(f"the way of verification: {verification} is not supported")
-        if len(res) != n_label:
-            if args.logging:
-                logging.info(f"trial: {trial_iter}/{n_trials} partly failed; {len(res)}/{n_label}")
+
         result.append(res)
 
 # save result into pickle
 ex_id = hashlib.md5(str(args).encode()).hexdigest()
 datetime = time.strftime("%Y%m%d%H%M%S")
-file_name = f"dbpedia_14-{datetime}_{ex_id}.pickle"
+file_name = f"truthrul_qa-{datetime}_{ex_id}.pickle"
 file_path = "./results/test/" if is_test else "./results/"
 file_path += args.group_id + "/"
 os.makedirs(file_path, exist_ok=True)
