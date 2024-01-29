@@ -77,8 +77,9 @@ result = []
 def get_timestamp():
     return str(time.time()).split('.')[0]
 
+
 # get labels from model
-labels = []
+label_question = {}
 for idx, row in enumerate(ds_truthfulqa):
     question = row["question"]
     if args.logging:
@@ -92,10 +93,10 @@ for idx, row in enumerate(ds_truthfulqa):
         topic = ai_res.content
     if args.logging:
         if topic == "":
-            logging.info("topic is empty")
+            logging.info(f"topic is empty iter: {idx}")
         else:
             logging.info(f"topic: {topic}")
-    ds_truthfulqa[idx]["topic"] = topic
+    label_question[topic] = [question]
 
 # start experiment
 start_time_seconds = get_timestamp()
@@ -106,72 +107,11 @@ for n_sample in n_sample_range:
         if args.logging:
             logging.info(f"trial: {trial_iter}/{n_trials}")
         res = []
-
-        for idx, row in enumerate(ds_truthfulqa):
-            question = row["question"]
-            if args.logging:
-                logging.info(f"question: {question}")
-            query = [pos_q_template.format(question=question, n_examples=n_sample)]
-            ai_res = llm.invoke(query)
-            positive_examples = []
-            if isinstance(ai_res, str):
-                positive_examples = eval(ai_res)
-            else:
-                positive_examples = eval(ai_res.content)
-            if args.logging:
-                logging.info(f"positive examples: {positive_examples}")
-
-            query = [neg_q_template.format(question=question, n_examples=n_sample)]
-            ai_res = llm.invoke(query)
-            negative_examples = []
-            if isinstance(ai_res, str):
-                negative_examples = eval(ai_res)
-            else:
-                negative_examples = eval(ai_res.content)
-            if args.logging:
-                logging.info(f"negative examples: {negative_examples}")
-
-            # search positive examples in cluster
-            positive_score = 0
-            for example in positive_examples:
-                # check partly match
-                if example in row["choices"]:
-                    positive_score += 1
-                # else:
-                # print(example, " is not in dataset")
-            TP = positive_score
-            FP = n_sample - positive_score
-
-            # search negative examples in cluster
-            negative_score = 0
-            for example in negative_examples:
-                # check partly match
-                if example not in row["choices"]:
-                    negative_score += 1
-                # else:
-                # print(example, " is not in dataset")
-            TN = negative_score
-            FN = n_sample - negative_score
-
-            if args.logging:
-                logging.info(f"TP: {TP}, FP: {FP}, TN: {TN}, FN: {FN}")
-
-            result.append({
-                "question": question,
-                "topic": row["topic"],
-                "choices": row["choices"],
-                "TP": TP,
-                "FP": FP,
-                "TN": TN,
-                "FN": FN,
-                "n_sample": n_sample
-            })
-
         if verification == "dataset":
-            res = ask_positive_and_negative_for_class(llm, ds_truthfulqa, n_sample, pos_q_template, neg_q_template,
+            res = ask_positive_and_negative_for_class(llm, label_question, n_sample, pos_q_template, neg_q_template,
                                                       max_retry=args.max_retry)
         elif verification == "themselves":
-            res = check_by_themselves(llm, ds_truthfulqa, n_sample, pos_q_template, neg_q_template,
+            res = check_by_themselves(llm, label_question, n_sample, pos_q_template, neg_q_template,
                                       max_retry=args.max_retry)
         else:
             raise ValueError(f"the way of verification: {verification} is not supported")
