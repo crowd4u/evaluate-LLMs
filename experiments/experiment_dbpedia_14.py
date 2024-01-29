@@ -18,7 +18,6 @@ from eval_llm.ask_llms_examples import ask_positive_and_negative_for_class
 from eval_llm.check_by_themselves import check_by_themselves
 from eval_llm.queries import query_positive, query_negative, query_negative_super
 
-
 load_dotenv()
 
 strategy_list = ["normal", "super"]
@@ -30,7 +29,8 @@ parser.add_argument("--n_trials", default=1, type=int, help="Number of trials")
 parser.add_argument("--n_sample_from", default=5, type=int, help="Number of samples from")
 parser.add_argument("--n_sample_to", default=5, type=int, help="Number of samples to")
 parser.add_argument("--n_sample_step", default=5, type=int, help="Number of samples step")
-parser.add_argument("--model", default="gpt-3.5-turbo-instruct", type=str, help="Model name", choices=["gpt-3.5-turbo-instruct"])
+parser.add_argument("--model", default="gpt-3.5-turbo-instruct", type=str, help="Model name",
+                    choices=["gpt-3.5-turbo-instruct"])
 parser.add_argument("--logging", default=True, type=bool, help="Logging to stdout")
 parser.add_argument("--max_retry", default=3, type=int, help="Max retry to invoke llms")
 parser.add_argument("--test", default=False, type=bool, help="Test mode")
@@ -63,8 +63,12 @@ elif args.strategy == "normal":
 else:
     raise ValueError(f"strategy: {args.strategy} is not supported")
 
-ds_wiki = load_dataset("dbpedia_14", split="train")
-n_label = len(ds_wiki.features["label"].names)
+dbpedia_14 = load_dataset("dbpedia_14", split="train")
+labels = dbpedia_14.features["label"].names
+n_label = len(labels)
+
+clusters: dict[str, list[str]] = {label: [x["title"] for x in dbpedia_14 if x["label"] == idx] for idx, label in
+                                  enumerate(labels)}
 
 n_trials = args.n_trials
 n_sample_range = range(args.n_sample_from, args.n_sample_to + 1, args.n_sample_step)
@@ -81,15 +85,15 @@ start_time_seconds = get_timestamp()
 for n_sample in n_sample_range:
     if args.logging:
         logging.info(f"sample number: {n_sample}")
-    for trial_iter in range(1, n_trials+1):
+    for trial_iter in range(1, n_trials + 1):
         if args.logging:
             logging.info(f"trial: {trial_iter}/{n_trials}")
         res = []
         if verification == "dataset":
-            res = ask_positive_and_negative_for_class(llm, ds_wiki, n_sample, pos_q_template, neg_q_template,
+            res = ask_positive_and_negative_for_class(llm, clusters, n_sample, pos_q_template, neg_q_template,
                                                       max_retry=args.max_retry)
         elif verification == "themselves":
-            res = check_by_themselves(llm, ds_wiki, n_sample, pos_q_template, neg_q_template,
+            res = check_by_themselves(llm, clusters, n_sample, pos_q_template, neg_q_template,
                                       max_retry=args.max_retry)
         else:
             raise ValueError(f"the way of verification: {verification} is not supported")

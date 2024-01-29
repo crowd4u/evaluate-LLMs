@@ -15,7 +15,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 from eval_llm.utils.utils import invoke_completion, invoke_chat, combine_prompt_content
 
 
-def check_by_themselves(llm: BaseLanguageModel, dataset, n_sample: int,
+def check_by_themselves(llm: BaseLanguageModel, target_clusters: dict[str, list[str]], n_sample: int,
                         positive_message: ChatMessagePromptTemplate,
                         negative_message: ChatMessagePromptTemplate,
                         system_message: SystemMessage = default_system_message,
@@ -26,7 +26,7 @@ def check_by_themselves(llm: BaseLanguageModel, dataset, n_sample: int,
     ask llms to positive and negative examples for a class
 
     :param llm:
-    :param dataset: should be a dataset with label feature. (loaded from datasets.load_dataset)
+    :param target_clusters: target label and texts
     :param n_sample:
     :param positive_message: message to ask llms to generate examples.
         With two {}, the first to be replaced by label to ask, the second to be replaced by number of examples.
@@ -41,14 +41,12 @@ def check_by_themselves(llm: BaseLanguageModel, dataset, n_sample: int,
     :param max_retry: max retry to invoke llms
     :return: list of dict
     """
-    classlabel_list: list[str] = dataset.features["label"].names
 
     system_message = SystemMessage(content=system_message.content.format(n_sample))
 
     tmp_result = []
     # print("sample number: ", n_sample)
-    for class_idx, label in enumerate(classlabel_list):
-        cluster: list[str] = [x["title"] for x in dataset if x["label"] == class_idx]
+    for label, cluster in target_clusters.items():
         print("class label: ", label)
         positive_query = [system_message, positive_message.format(label=label, n_examples=n_sample)]
         positive_examples = []
