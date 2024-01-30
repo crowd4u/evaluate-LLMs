@@ -83,7 +83,7 @@ def execute_experiment(args, logger=None):
         ai_res = llm.invoke(query)
         topic = ""
         if isinstance(ai_res, str):
-            ai_res = ai_res
+            topic = ai_res
         else:
             topic = ai_res.content
         if logger:
