@@ -33,92 +33,110 @@ parser.add_argument("--model", default="gpt-3.5-turbo-instruct", type=str, help=
                     choices=["gpt-3.5-turbo-instruct"])
 parser.add_argument("--logging", default=True, type=bool, help="Logging to stdout")
 parser.add_argument("--max_retry", default=3, type=int, help="Max retry to invoke llms")
-parser.add_argument("--test", default=False, type=bool, help="Test mode")
+parser.add_argument("--test", help="Test mode", action="store_true")
 parser.add_argument("--strategy", default="normal", type=str, help="Strategy to ask llms",
                     choices=strategy_list)
 parser.add_argument("--verification", default="dataset", type=str, help="Verification method",
                     choices=verification_list)
 args = parser.parse_args()
 
-if args.logging:
-    print("options", args)
-
-verification = args.verification
-
-is_test = args.test
-llm = None
-if is_test:
-    llm = FakeListLLM(responses=['["yes"]', '["no"]'])
-    if args.logging:
-        logging.info("Test mode")
-else:
-    llm = OpenAI(model=args.model, max_retries=args.max_retry)
-
-if args.strategy == "super":
-    pos_q_template = ChatMessagePromptTemplate.from_template(role="user", template=query_positive)
-    neg_q_template = ChatMessagePromptTemplate.from_template(role="user", template=query_negative_super)
-elif args.strategy == "normal":
-    pos_q_template = ChatMessagePromptTemplate.from_template(role="user", template=query_positive)
-    neg_q_template = ChatMessagePromptTemplate.from_template(role="user", template=query_negative)
-else:
-    raise ValueError(f"strategy: {args.strategy} is not supported")
-
-dbpedia_14 = load_dataset("dbpedia_14", split="train")
-labels = dbpedia_14.features["label"].names
-n_label = len(labels)
-
-clusters: dict[str, list[str]] = {label: [x["title"] for x in dbpedia_14 if x["label"] == idx] for idx, label in
-                                  enumerate(labels)}
-
-n_trials = args.n_trials
-n_sample_range = range(args.n_sample_from, args.n_sample_to + 1, args.n_sample_step)
-
-result = []
-
 
 def get_timestamp():
     return str(time.time()).split('.')[0]
 
 
-# start experiment
-start_time_seconds = get_timestamp()
-for n_sample in n_sample_range:
+def execute_experiment(args, logger):
+    verification = args.verification
+
+    is_test = args.test
+    llm = None
+    if is_test:
+        llm = FakeListLLM(responses=['["yes"]', '["no"]'])
+        if logger:
+            logger.info("Test mode")
+    else:
+        llm = OpenAI(model=args.model, max_retries=args.max_retry)
+
+    if args.strategy == "super":
+        pos_q_template = ChatMessagePromptTemplate.from_template(role="user", template=query_positive)
+        neg_q_template = ChatMessagePromptTemplate.from_template(role="user", template=query_negative_super)
+    elif args.strategy == "normal":
+        pos_q_template = ChatMessagePromptTemplate.from_template(role="user", template=query_positive)
+        neg_q_template = ChatMessagePromptTemplate.from_template(role="user", template=query_negative)
+    else:
+        raise ValueError(f"strategy: {args.strategy} is not supported")
+
+    dbpedia_14 = load_dataset("dbpedia_14", split="train")
+    labels = dbpedia_14.features["label"].names
+    n_label = len(labels)
+
+    clusters: dict[str, list[str]] = {label: [x["title"] for x in dbpedia_14 if x["label"] == idx] for idx, label in
+                                      enumerate(labels)}
+
+    n_trials = args.n_trials
+    n_sample_range = range(args.n_sample_from, args.n_sample_to + 1, args.n_sample_step)
+
+    # start experiment
+    result = []
+    for n_sample in n_sample_range:
+        if logger:
+            logger.info(f"sample number: {n_sample}")
+        for trial_iter in range(1, n_trials + 1):
+            if logger:
+                logger.info(f"trial: {trial_iter}/{n_trials}")
+            res = []
+            if verification == "dataset":
+                res = ask_positive_and_negative_for_class(llm, clusters, n_sample, pos_q_template, neg_q_template,
+                                                          max_retry=args.max_retry)
+            elif verification == "themselves":
+                res = check_by_themselves(llm, clusters, n_sample, pos_q_template, neg_q_template,
+                                          max_retry=args.max_retry)
+            else:
+                raise ValueError(f"the way of verification: {verification} is not supported")
+            if len(res) != n_label:
+                if logger:
+                    logger.info(f"trial: {trial_iter}/{n_trials} partly failed; {len(res)}/{n_label}")
+            result.append(res)
+    return result
+
+
+if __name__ == "__main__":
+    args = parser.parse_args()
+    # set file name
+    ex_id = hashlib.md5(str(args).encode()).hexdigest()
+    datetime = time.strftime("%Y%m%d%H%M%S")
+    result_file_name = f"dbpedia_14-{datetime}_{ex_id}.pickle"
+    log_file_name = f"dbpedia_14-{datetime}_{ex_id}.log"
+    file_path = "./results/test/" if args.test else "./results/"
+    file_path += args.group_id + "/"
+    os.makedirs(file_path, exist_ok=True)
+
+    logger = None
     if args.logging:
-        logging.info(f"sample number: {n_sample}")
-    for trial_iter in range(1, n_trials + 1):
-        if args.logging:
-            logging.info(f"trial: {trial_iter}/{n_trials}")
-        res = []
-        if verification == "dataset":
-            res = ask_positive_and_negative_for_class(llm, clusters, n_sample, pos_q_template, neg_q_template,
-                                                      max_retry=args.max_retry)
-        elif verification == "themselves":
-            res = check_by_themselves(llm, clusters, n_sample, pos_q_template, neg_q_template,
-                                      max_retry=args.max_retry)
-        else:
-            raise ValueError(f"the way of verification: {verification} is not supported")
-        if len(res) != n_label:
-            if args.logging:
-                logging.info(f"trial: {trial_iter}/{n_trials} partly failed; {len(res)}/{n_label}")
-        result.append(res)
+        logging.basicConfig(level=logging.INFO, filename=file_path + log_file_name,
+                            format="%(asctime)s %(levelname)s %(message)s")
+        logger = logging.getLogger()
+        logger.info("options: %s", vars(args))
 
-# save result into pickle
-ex_id = hashlib.md5(str(args).encode()).hexdigest()
-datetime = time.strftime("%Y%m%d%H%M%S")
-file_name = f"dbpedia_14-{datetime}_{ex_id}.pickle"
-file_path = "./results/test/" if is_test else "./results/"
-file_path += args.group_id + "/"
-os.makedirs(file_path, exist_ok=True)
-
-with open(file_path + file_name, "wb") as f:
+    # execute experiment
+    result = []
+    start_time_seconds = get_timestamp()
+    try:
+        result = execute_experiment(args, logger=logger)
+    except Exception as e:
+        if logger:
+            logger.error(e)
     finish_time_seconds = get_timestamp()
-    save_data = {
-        "start_time": start_time_seconds,
-        "finish_time": finish_time_seconds,
-        "experiment_id": ex_id,
-        "args": args,
-        "result": result
-    }
-    pickle.dump(save_data, f)
-    if args.logging:
-        logging.info(f"result saved to {file_name}")
+
+    # save result into pickle
+    with open(file_path + result_file_name, "wb") as f:
+        save_data = {
+            "start_time": start_time_seconds,
+            "finish_time": finish_time_seconds,
+            "experiment_id": ex_id,
+            "args": args,
+            "result": result,
+        }
+        pickle.dump(save_data, f)
+        if logger:
+            logger.info(f"result saved to {result_file_name}")

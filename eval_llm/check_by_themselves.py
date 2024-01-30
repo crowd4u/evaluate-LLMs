@@ -6,6 +6,7 @@ from langchain.schema import SystemMessage
 from langchain.prompts import ChatMessagePromptTemplate
 
 import sys
+import logging
 from pathlib import Path
 
 from eval_llm.queries import default_system_message, verification_template, bulk_verification_system_message, \
@@ -20,7 +21,8 @@ def check_by_themselves(llm: BaseLanguageModel, target_clusters: dict[str, list[
                         negative_message: ChatMessagePromptTemplate,
                         system_message: SystemMessage = default_system_message,
                         verification_message_template: ChatMessagePromptTemplate = bulk_verification_template,
-                        max_retry: int = 3
+                        max_retry: int = 3,
+                        logger: logging.Logger = None
                         ) -> list[dict]:
     """
     ask llms to positive and negative examples for a class
@@ -39,6 +41,7 @@ def check_by_themselves(llm: BaseLanguageModel, target_clusters: dict[str, list[
     :param verification_message_template: message to ask llms to verify examples.
     :param system_message: system message to ask llms to generate examples. With {} to be replaced by number of examples.
     :param max_retry: max retry to invoke llms
+    :param logger: logger
     :return: list of dict
     """
 
@@ -47,7 +50,8 @@ def check_by_themselves(llm: BaseLanguageModel, target_clusters: dict[str, list[
     tmp_result = []
     # print("sample number: ", n_sample)
     for label, cluster in target_clusters.items():
-        print("class label: ", label)
+        if logger:
+            logger.info(f"Class label: {label}")
         positive_query = [system_message, positive_message.format(label=label, n_examples=n_sample)]
         positive_examples = []
 
@@ -60,8 +64,8 @@ def check_by_themselves(llm: BaseLanguageModel, target_clusters: dict[str, list[
         else:
             raise ValueError(f"llm: {llm} is not supported")
 
-        if len(positive_examples) == 0:
-            print("positive examples is empty in class: ", label)
+        if len(positive_examples) == 0 and logger:
+            logger.warning(f"positive examples is empty in class: {label}")
             continue
 
         negative_query = [system_message, negative_message.format(label=label, n_examples=n_sample)]
@@ -76,15 +80,15 @@ def check_by_themselves(llm: BaseLanguageModel, target_clusters: dict[str, list[
         else:
             raise ValueError(f"llm: {llm} is not supported")
 
-        if len(negative_examples) == 0:
-            print("negative examples is empty in class: ", label)
+        if len(negative_examples) == 0 and logger:
+            logger.warning(f"negative examples is empty in class: {label}")
 
         positive_verifications = bulk_verification_by_themselves(llm, positive_examples, label, "Yes",
                                                                  query_template=verification_message_template,
-                                                                 max_retry=max_retry)
+                                                                 max_retry=max_retry, logger=logger)
         negative_verifications = bulk_verification_by_themselves(llm, negative_examples, label, "No",
                                                                  query_template=verification_message_template,
-                                                                 max_retry=max_retry)
+                                                                 max_retry=max_retry, logger=logger)
         # TP is a number of the True in the positive_verifications
         TP = sum(positive_verifications)
         TN = sum(negative_verifications)
@@ -111,7 +115,9 @@ def verification_by_themselves(llm: BaseLanguageModel, target_items: list[str], 
                                judge_str: str = "Yes",
                                system_query: SystemMessage = system_message_for_verification,
                                query_template: ChatMessagePromptTemplate = verification_template,
-                               max_retry: int = 3) -> list[bool]:
+                               max_retry: int = 3,
+                               logger: logging.Logger = None
+                               ) -> list[bool]:
     """
     ask llms to verify examples
     :param llm:
@@ -122,21 +128,28 @@ def verification_by_themselves(llm: BaseLanguageModel, target_items: list[str], 
     :param query_template: message to ask llms to verify examples. With two {} to be replaced by item and label.
         For example: "The {item} is a kind of {label}?"
     :param max_retry: number of retry to invoke llms.
+    :param logger: logger
     :return: result: list of bool
     """
     result: list[bool] = []
     for item in target_items:
         answer = ""
-
-        if isinstance(llm, FakeListLLM):
-            answer = llm.invoke([system_query, query_template.format(item=item, label=label)])
-        elif isinstance(llm, ChatOpenAI):
-            answer = invoke_chat(llm, [system_query, query_template.format(item=item, label=label)])
-        elif isinstance(llm, OpenAI):
-            answer = invoke_completion(llm, [system_query, query_template.format(item=item, label=label)])
-        else:
-            raise ValueError(f"llm: {llm} is not supported")
-
+        for _ in range(max_retry):
+            if isinstance(llm, FakeListLLM):
+                answer = llm.invoke([system_query, query_template.format(item=item, label=label)])
+            elif isinstance(llm, ChatOpenAI):
+                answer = invoke_chat(llm, [system_query, query_template.format(item=item, label=label)])
+            elif isinstance(llm, OpenAI):
+                answer = invoke_completion(llm, [system_query, query_template.format(item=item, label=label)])
+            else:
+                raise ValueError(f"llm: {llm} is not supported")
+            if answer == "":
+                if logger:
+                    logger.warning("answer is empty")
+                    logger.warning("retrying...")
+                continue
+            else:
+                break
         result.append(judge_str.lower() in answer.lower())
     return result
 
@@ -145,7 +158,9 @@ def bulk_verification_by_themselves(llm: BaseLanguageModel, target_items: list[s
                                     judge_str: str = "Yes",
                                     system_query: SystemMessage = bulk_verification_system_message,
                                     query_template: ChatMessagePromptTemplate = bulk_verification_template,
-                                    max_retry: int = 3) -> list[bool]:
+                                    max_retry: int = 3,
+                                    logger: logging.Logger = None
+                                    ) -> list[bool]:
     """
     ask llms to verify examples (ask at one time)
     :param llm:
@@ -155,6 +170,7 @@ def bulk_verification_by_themselves(llm: BaseLanguageModel, target_items: list[s
     :param system_query:
     :param query_template: message to ask llms to verify examples. With two {} to be replaced by label and list.
     :param max_retry: number of retry to invoke llms.
+    :param logger: logger
     :return: list of bool
     """
     result = []
@@ -176,8 +192,8 @@ def bulk_verification_by_themselves(llm: BaseLanguageModel, target_items: list[s
             # all item in result must be bool
             if all([isinstance(x, bool) for x in result]):
                 break
-            else:
-                print("result is not bool list: ", result)
-                print("retry")
+            elif logger:
+                logger.warning(f"result is not bool list: {result}")
+                logger.warning("retrying...")
                 continue
     return result

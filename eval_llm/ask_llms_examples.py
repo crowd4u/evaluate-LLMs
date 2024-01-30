@@ -6,6 +6,7 @@ from langchain.schema import SystemMessage
 from langchain.prompts import ChatMessagePromptTemplate
 
 import sys
+import logging
 from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
 from eval_llm.utils.utils import in_the_list, invoke_completion, invoke_chat
@@ -17,7 +18,8 @@ def ask_positive_and_negative_for_class(llm: BaseLanguageModel, target_clusters:
                                         positive_message_template: ChatMessagePromptTemplate,
                                         negative_message_template: ChatMessagePromptTemplate,
                                         system_message: SystemMessage = default_system_message,
-                                        max_retry: int = 3
+                                        max_retry: int = 3,
+                                        logger: logging.Logger = None
                                         ) -> list[dict]:
     """
     ask llms to positive and negative examples for a class
@@ -35,10 +37,11 @@ def ask_positive_and_negative_for_class(llm: BaseLanguageModel, target_clusters:
         The role should be "user".
     :param system_message: system message to ask llms to generate examples. With {} to be replaced by number of examples.
     :param max_retry: max retry to invoke llms
+    :param logger: logger
     :return: list of dict
     """
-    if isinstance(llm, FakeListLLM):
-        print("FakeListLLM is used: running in test mode.")
+    if isinstance(llm, FakeListLLM) and logger:
+        logger.info("FakeListLLM is used: running in test mode.")
 
     if positive_message_template.role != "user":
         raise ValueError("positive_message_template.role should be 'user'")
@@ -62,8 +65,8 @@ def ask_positive_and_negative_for_class(llm: BaseLanguageModel, target_clusters:
         else:
             raise ValueError(f"llm: {llm} is not supported")
 
-        if len(positive_examples) == 0:
-            print("positive examples is empty in class: ", label)
+        if len(positive_examples) == 0 and logger:
+            logger.warning("positive examples is empty in class: ", label)
             continue
 
         negative_query = [system_message, negative_message_template.format(label=label, n_examples=n_sample)]
@@ -77,8 +80,8 @@ def ask_positive_and_negative_for_class(llm: BaseLanguageModel, target_clusters:
         else:
             raise ValueError(f"llm: {llm} is not supported")
 
-        if len(negative_examples) == 0:
-            print("negative examples is empty in class: ", label)
+        if len(negative_examples) == 0 and logger:
+            logger.warning("negative examples is empty in class: ", label)
             continue
 
         # search positive examples in cluster
