@@ -18,11 +18,11 @@ from eval_llm.ask_llms_examples import ask_positive_and_negative_for_class
 from eval_llm.check_by_themselves import check_by_themselves
 from eval_llm.queries import query_positive, query_negative, query_negative_super, query_topic
 
-
 load_dotenv()
 
 strategy_list = ["normal", "super"]
 verification_list = ["dataset", "themselves"]
+model_list = ["gpt-3.5-turbo-instruct", "gpt-3.5-turbo", "davinci-002"]
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--group_id", default="default", type=str, help="Group ID of the experiment")
@@ -30,7 +30,7 @@ parser.add_argument("--n_trials", default=1, type=int, help="Number of trials")
 parser.add_argument("--n_sample_from", default=5, type=int, help="Number of samples from")
 parser.add_argument("--n_sample_to", default=5, type=int, help="Number of samples to")
 parser.add_argument("--n_sample_step", default=5, type=int, help="Number of samples step")
-parser.add_argument("--model", default="gpt-3.5-turbo-instruct", type=str, help="Model name", choices=["gpt-3.5-turbo-instruct"])
+parser.add_argument("--model", default="davinci-002", type=str, help="Model name", choices=model_list)
 parser.add_argument("--logging", default=True, type=bool, help="Logging to stdout")
 parser.add_argument("--max_retry", default=3, type=int, help="Max retry to invoke llms")
 parser.add_argument("--test", action="store_true", help="Test mode")
@@ -38,6 +38,7 @@ parser.add_argument("--strategy", default="normal", type=str, help="Strategy to 
                     choices=strategy_list)
 parser.add_argument("--verification", default="dataset", type=str, help="Verification method",
                     choices=verification_list)
+parser.add_argument("--temperature", default=0.0, type=float, help="Temperature of model")
 
 
 def get_timestamp():
@@ -53,10 +54,9 @@ def execute_experiment(args, logger=None):
         if logger:
             logger.info("Test mode")
     else:
-        llm = OpenAI(model=args.model, max_retries=args.max_retry)
+        llm = OpenAI(model=args.model, max_retries=args.max_retry, temperature=args.temperature)
 
     topic_q_template = ChatMessagePromptTemplate.from_template(role="user", template=query_topic)
-
 
     if args.strategy == "super":
         pos_q_template = ChatMessagePromptTemplate.from_template(role="user", template=query_positive)
@@ -101,7 +101,7 @@ def execute_experiment(args, logger=None):
     for n_sample in n_sample_range:
         if logger:
             logger.info(f"sample number: {n_sample}")
-        for trial_iter in range(1, n_trials+1):
+        for trial_iter in range(1, n_trials + 1):
             if logger:
                 logger.info(f"trial: {trial_iter}/{n_trials}")
             res = []
