@@ -84,8 +84,10 @@ def execute_experiment(args, logger=None):
         topic = ""
         if isinstance(ai_res, str):
             topic = ai_res
-        else:
+        elif hasattr(ai_res, "content"):
             topic = ai_res.content
+        else:
+            raise ValueError(f"This type of response of AI: {type(ai_res)} is not supported")
         if logger:
             if topic == "":
                 logger.info(f"topic is empty iter: {idx}")

@@ -34,8 +34,10 @@ def invoke_completion(model: OpenAI, prompt: list[BaseMessage], max_retry: int =
             # print("res", ai_res)
             if isinstance(ai_res, str):
                 tmp_result = eval(ai_res)
-            else:
+            elif hasattr(ai_res, "content"):
                 tmp_result = eval(ai_res.content)
+            else:
+                raise ValueError(f"This type of response of AI: {type(ai_res)} is not supported")
         except Exception as e:
             print(e)
             pass
@@ -61,8 +63,10 @@ def invoke_chat(chat: ChatOpenAI, prompt: list[BaseMessage], max_retry: int = 3)
             ai_res = chat.invoke(prompt)
             if isinstance(ai_res, str):
                 tmp_result = eval(ai_res)
-            else:
+            elif hasattr(ai_res, "content"):
                 tmp_result = eval(ai_res.content)
+            else:
+                raise ValueError(f"This type of response of AI: {type(ai_res)} is not supported")
         except Exception as e:
             print(e)
             pass
