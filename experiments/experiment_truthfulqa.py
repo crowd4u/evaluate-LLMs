@@ -22,7 +22,7 @@ load_dotenv()
 
 strategy_list = ["normal", "super"]
 verification_list = ["dataset", "themselves"]
-model_list = ["gpt-3.5-turbo-instruct", "gpt-3.5-turbo", "davinci-002"]
+model_list = ["gpt-3.5-turbo-instruct", "gpt-3.5-turbo", "gpt-3.5-turbo-instruct-0914"]
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--group_id", default="default", type=str, help="Group ID of the experiment")
@@ -30,15 +30,16 @@ parser.add_argument("--n_trials", default=1, type=int, help="Number of trials")
 parser.add_argument("--n_sample_from", default=5, type=int, help="Number of samples from")
 parser.add_argument("--n_sample_to", default=5, type=int, help="Number of samples to")
 parser.add_argument("--n_sample_step", default=5, type=int, help="Number of samples step")
-parser.add_argument("--model", default="davinci-002", type=str, help="Model name", choices=model_list)
+parser.add_argument("--model", default="gpt-3.5-turbo-instruct-0914", type=str, help="Model name", choices=model_list)
 parser.add_argument("--logging", default=True, type=bool, help="Logging to stdout")
 parser.add_argument("--max_retry", default=3, type=int, help="Max retry to invoke llms")
 parser.add_argument("--test", action="store_true", help="Test mode")
 parser.add_argument("--strategy", default="normal", type=str, help="Strategy to ask llms",
                     choices=strategy_list)
-parser.add_argument("--verification", default="dataset", type=str, help="Verification method",
+parser.add_argument("--verification", default="themselves", type=str, help="Verification method",
                     choices=verification_list)
 parser.add_argument("--temperature", default=0.0, type=float, help="Temperature of model")
+parser.add_argument("--n_items", default=0, type=int, help="Number of items to ask. when 0, ask all items")
 
 
 def get_timestamp():
@@ -76,6 +77,8 @@ def execute_experiment(args, logger=None):
     # get labels from model
     label_question = {}
     for idx, row in enumerate(ds_truthfulqa):
+        if args.n_items > 0 and idx >= args.n_items:
+            break
         question = row["question"]
         if args.logging:
             logging.info(f"question: {question}")

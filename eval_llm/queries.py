@@ -4,7 +4,7 @@ from langchain_core.prompts import ChatMessagePromptTemplate
 query_positive = "Please pick up some examples of {label}. You need to pick up {n_examples} examples."
 query_negative = "Please pick up some examples which are not {label}. You need to pick up {n_examples} examples."
 query_negative_super = "Please pick up some examples which are the superordinate of {label}, but not {label}. You need to pick up {n_examples} examples." # NOQA
-query_topic = "Please answer the topic of the following question. Question: {question}"
+query_topic = "Please pick up the topic of the class of the following statements, in a word. Statements: {question}\nTopic: "
 default_system_message = SystemMessage(
     content='''You should answer with the literal of list of Python with all string item. For example, ["example1", "example's 2", "3 examples"].'''
 )
