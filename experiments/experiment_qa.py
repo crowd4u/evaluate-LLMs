@@ -20,11 +20,13 @@ from eval_llm.queries import query_positive, query_negative, query_negative_supe
 
 load_dotenv()
 
+dataset_list = ["truthful_qa", "trivia_qa"]
 strategy_list = ["normal", "super"]
 verification_list = ["dataset", "themselves"]
 model_list = ["gpt-3.5-turbo-instruct", "gpt-3.5-turbo", "davinci-002"]
 
 parser = argparse.ArgumentParser()
+parser.add_argument("--dataset", default="truthful_qa", type=str, help="Dataset name", choices=dataset_list)
 parser.add_argument("--group_id", default="default", type=str, help="Group ID of the experiment")
 parser.add_argument("--n_trials", default=1, type=int, help="Number of trials")
 parser.add_argument("--n_sample_from", default=5, type=int, help="Number of samples from")
@@ -45,39 +47,51 @@ def get_timestamp():
     return str(time.time()).split('.')[0]
 
 
-def execute_experiment(args, logger=None):
-    verification = args.verification
+def execute_experiment(parsed_args, dataset, col_answer, logger=None, subcol_answer=""):
+    """
+
+    :param parsed_args:
+    :param dataset: should have "question"(str) and "answer"(list of str) keys
+    :param logger:
+    :param col_answer: key of answer
+    :param subcol_answer: Sub key of answer
+    :return:
+    """
+    verification = parsed_args.verification
 
     llm = None
-    if args.test:
+    if parsed_args.test:
         llm = FakeListLLM(responses=['["yes"]', '["no"]'])
         if logger:
             logger.info("Test mode")
     else:
-        llm = OpenAI(model=args.model, max_retries=args.max_retry, temperature=args.temperature)
+        llm = OpenAI(model=parsed_args.model, max_retries=parsed_args.max_retry, temperature=parsed_args.temperature)
 
     topic_q_template = ChatMessagePromptTemplate.from_template(role="user", template=query_topic)
 
-    if args.strategy == "super":
+    if parsed_args.strategy == "super":
         pos_q_template = ChatMessagePromptTemplate.from_template(role="user", template=query_positive)
         neg_q_template = ChatMessagePromptTemplate.from_template(role="user", template=query_negative_super)
-    elif args.strategy == "normal":
+    elif parsed_args.strategy == "normal":
         pos_q_template = ChatMessagePromptTemplate.from_template(role="user", template=query_positive)
         neg_q_template = ChatMessagePromptTemplate.from_template(role="user", template=query_negative)
     else:
-        raise ValueError(f"strategy: {args.strategy} is not supported")
+        raise ValueError(f"strategy: {parsed_args.strategy} is not supported")
 
-    ds_truthfulqa = load_dataset("truthful_qa", "multiple_choice", split="validation")
-
-    n_trials = args.n_trials
-    n_sample_range = range(args.n_sample_from, args.n_sample_to + 1, args.n_sample_step)
+    n_trials = parsed_args.n_trials
+    n_sample_range = range(parsed_args.n_sample_from, parsed_args.n_sample_to + 1, parsed_args.n_sample_step)
 
     result = []
     # get labels from model
     label_question = {}
-    for idx, row in enumerate(ds_truthfulqa):
+    label_answers = {}
+    for idx, row in enumerate(dataset):
         question = row["question"]
-        if args.logging:
+        if subcol_answer == "":
+            answers = row[col_answer]
+        else:
+            answers = row[col_answer][subcol_answer]
+        if parsed_args.logging:
             logging.info(f"question: {question}")
         query = [topic_q_template.format(question=question)]
         ai_res = llm.invoke(query)
@@ -94,6 +108,7 @@ def execute_experiment(args, logger=None):
             else:
                 logger.info(f"topic: {topic}")
         label_question[topic] = [question]
+        label_answers[topic] = answers
 
     if logger:
         logger.info(f"labels: {label_question.keys()}")
@@ -108,11 +123,11 @@ def execute_experiment(args, logger=None):
                 logger.info(f"trial: {trial_iter}/{n_trials}")
             res = []
             if verification == "dataset":
-                res = ask_positive_and_negative_for_class(llm, label_question, n_sample, pos_q_template, neg_q_template,
-                                                          max_retry=args.max_retry)
+                res = ask_positive_and_negative_for_class(llm, label_answers, n_sample, pos_q_template, neg_q_template,
+                                                          max_retry=parsed_args.max_retry)
             elif verification == "themselves":
                 res = check_by_themselves(llm, label_question, n_sample, pos_q_template, neg_q_template,
-                                          max_retry=args.max_retry)
+                                          max_retry=parsed_args.max_retry)
             else:
                 raise ValueError(f"the way of verification: {verification} is not supported")
 
@@ -122,14 +137,16 @@ def execute_experiment(args, logger=None):
 
 if __name__ == "__main__":
     args = parser.parse_args()
+
+    target_ds = args.dataset
+
     # set file name
     ex_id = hashlib.md5(str(args).encode()).hexdigest()
     datetime = time.strftime("%Y%m%d%H%M%S")
-    result_file_name = f"truthrul_qa-{datetime}_{ex_id}.pickle"
-    log_file_name = f"truthrul_qa-{datetime}_{ex_id}.log"
+    result_file_name = f"{target_ds}-{datetime}_{ex_id}.pickle"
+    log_file_name = f"{target_ds}-{datetime}_{ex_id}.log"
     file_path = "./results/test/" if args.test else "./results/"
     file_path += args.group_id + "/"
-    os.makedirs(file_path, exist_ok=True)
 
     logger = None
     if args.logging:
@@ -138,18 +155,33 @@ if __name__ == "__main__":
         logger = logging.getLogger()
         logger.info("options: %s", vars(args))
 
+    if target_ds == "truthful_qa":
+        ds = load_dataset("truthful_qa", "multiple_choice", split="validation")
+        answer_col = "correct_answers"
+        subcol_answer = ""
+    elif target_ds == "trivia_qa":
+        ds = load_dataset("trivia_qa", "rc.wikipedia", split="validation")
+        answer_col = "answer"
+        subcol_answer = "aliases"
+    else:
+        raise ValueError(f"dataset: {target_ds} is not supported")
+    if logger:
+        logger.info(f"dataset: {target_ds} is loaded. {len(ds)} items.")
+
     # execute experiment
     result = []
     l_q = {}
     start_time_seconds = get_timestamp()
     try:
-        result, l_q = execute_experiment(args, logger=logger)
+        result, l_q = execute_experiment(args, dataset=ds, logger=logger, col_answer=answer_col,
+                                         subcol_answer=subcol_answer)
     except Exception as e:
         if logger:
             logger.error(e)
     finish_time_seconds = get_timestamp()
 
     # save result into pickle
+    os.makedirs(file_path, exist_ok=True)
     with open(file_path + result_file_name, "wb") as f:
         save_data = {
             "start_time": start_time_seconds,

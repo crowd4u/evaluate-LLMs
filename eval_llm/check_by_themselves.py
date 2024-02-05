@@ -49,7 +49,7 @@ def check_by_themselves(llm: BaseLanguageModel, target_clusters: dict[str, list[
 
     tmp_result = []
     # print("sample number: ", n_sample)
-    for label, cluster in target_clusters.items():
+    for label in target_clusters.keys():
         if logger:
             logger.info(f"Class label: {label}")
         positive_query = [system_message, positive_message.format(label=label, n_examples=n_sample)]

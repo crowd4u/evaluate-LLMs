@@ -25,7 +25,7 @@ def ask_positive_and_negative_for_class(llm: BaseLanguageModel, target_clusters:
     ask llms to positive and negative examples for a class
 
     :param llm:
-    :param target_clusters: target label and texts
+    :param target_clusters: target label and texts of answer candidates
     :param n_sample:
     :param positive_message_template: message to ask llms to generate examples.
         With two {}, the first to be replaced by label to ask, the second to be replaced by number of examples.
