@@ -150,6 +150,7 @@ if __name__ == "__main__":
     log_file_name = f"{target_ds}-{datetime}_{ex_id}.log"
     file_path = "./results/test/" if args.test else "./results/"
     file_path += args.group_id + "/"
+    os.makedirs(file_path, exist_ok=True)
 
     logger = None
     if args.logging:
@@ -184,7 +185,6 @@ if __name__ == "__main__":
     finish_time_seconds = get_timestamp()
 
     # save result into pickle
-    os.makedirs(file_path, exist_ok=True)
     with open(file_path + result_file_name, "wb") as f:
         save_data = {
             "start_time": start_time_seconds,
