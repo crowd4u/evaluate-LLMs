@@ -13,7 +13,7 @@ from eval_llm.queries import default_system_message, verification_template, bulk
     bulk_verification_template, system_message_for_verification
 
 sys.path.append(str(Path(__file__).parent.parent))
-from eval_llm.utils.utils import invoke_completion, invoke_chat, combine_prompt_content
+from eval_llm.utils.utils import invoke_completion, invoke_chat
 
 
 def check_by_themselves(llm: BaseLanguageModel, target_clusters: dict[str, list[str]], n_sample: int,
@@ -83,12 +83,12 @@ def check_by_themselves(llm: BaseLanguageModel, target_clusters: dict[str, list[
         if len(negative_examples) == 0 and logger:
             logger.warning(f"negative examples is empty in class: {label}")
 
-        positive_verifications = bulk_verification_by_themselves(llm, positive_examples, label, "Yes",
-                                                                 query_template=verification_message_template,
-                                                                 max_retry=max_retry, logger=logger)
-        negative_verifications = bulk_verification_by_themselves(llm, negative_examples, label, "No",
-                                                                 query_template=verification_message_template,
-                                                                 max_retry=max_retry, logger=logger)
+        positive_verifications: list[bool] = bulk_verification_by_themselves(llm, positive_examples, label, "Yes",
+                                                                             query_template=verification_message_template,
+                                                                             max_retry=max_retry, logger=logger)
+        negative_verifications: list[bool] = bulk_verification_by_themselves(llm, negative_examples, label, "No",
+                                                                             query_template=verification_message_template,
+                                                                             max_retry=max_retry, logger=logger)
         # TP is a number of the True in the positive_verifications
         TP = sum(positive_verifications)
         TN = sum(negative_verifications)
@@ -176,7 +176,6 @@ def bulk_verification_by_themselves(llm: BaseLanguageModel, target_items: list[s
     result = []
 
     query = [system_query, query_template.format(label=label, list=str(target_items))]
-    query_str = combine_prompt_content(query)
     for _ in range(max_retry):
         if isinstance(llm, FakeListLLM):
             result = eval(llm.invoke([system_query, query_template.format(
@@ -191,9 +190,8 @@ def bulk_verification_by_themselves(llm: BaseLanguageModel, target_items: list[s
         if isinstance(result, list):
             # all item in result must be bool
             if all([isinstance(x, bool) for x in result]):
-                break
-            elif logger:
-                logger.warning(f"result is not bool list: {result}")
-                logger.warning("retrying...")
-                continue
-    return result
+                return result
+        if logger:
+            logger.warning(f"result is not bool list: {result}")
+            logger.warning("retrying...")
+    raise ValueError(f"result is not bool list: {result}")
