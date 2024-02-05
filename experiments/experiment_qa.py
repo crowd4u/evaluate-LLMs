@@ -48,7 +48,7 @@ def get_timestamp():
     return str(time.time()).split('.')[0]
 
 
-def execute_experiment(parsed_args, dataset, col_answer, logger=None, subcol_answer=""):
+def execute_experiment(parsed_args, dataset, col_answer="", logger=None, subcol_answer=""):
     """
 
     :param parsed_args:
@@ -90,10 +90,11 @@ def execute_experiment(parsed_args, dataset, col_answer, logger=None, subcol_ans
         if args.n_items > 0 and idx >= args.n_items:
             break
         question = row["question"]
-        if subcol_answer == "":
-            answers = row[col_answer]
-        else:
-            answers = row[col_answer][subcol_answer]
+        if verification == "dataset":
+            if subcol_answer == "":
+                answers = row[col_answer]
+            else:
+                answers = row[col_answer][subcol_answer]
         if parsed_args.logging:
             logging.info(f"question: {question}")
         query = [topic_q_template.format(question=question)]
@@ -111,7 +112,8 @@ def execute_experiment(parsed_args, dataset, col_answer, logger=None, subcol_ans
             else:
                 logger.info(f"topic: {topic}")
         label_question[topic] = [question]
-        label_answers[topic] = answers
+        if verification == "dataset":
+            label_answers[topic] = answers
 
     if logger:
         logger.info(f"labels: {label_question.keys()}")
@@ -159,10 +161,13 @@ if __name__ == "__main__":
         logger = logging.getLogger()
         logger.info("options: %s", vars(args))
 
+    answer_col = ""
+    subcol_answer = ""
     if target_ds == "truthful_qa":
         ds = load_dataset("truthful_qa", "multiple_choice", split="validation")
-        answer_col = "correct_answers"
-        subcol_answer = ""
+        if args.verification == "dataset":
+            raise ValueError(
+                "Dataset truthful_qa does not support verification by dataset. Please use 'themselves' for --verification.")
     elif target_ds == "trivia_qa":
         ds = load_dataset("trivia_qa", "rc.wikipedia", split="validation")
         answer_col = "answer"
