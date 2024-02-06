@@ -22,6 +22,7 @@ def check_by_themselves(llm: BaseLanguageModel, target_clusters: dict[str, list[
                         system_message: SystemMessage = default_system_message,
                         verification_message_template: ChatMessagePromptTemplate = bulk_verification_template,
                         max_retry: int = 3,
+                        temperature: float = 0,
                         logger: logging.Logger = None
                         ) -> list[dict]:
     """
@@ -41,6 +42,7 @@ def check_by_themselves(llm: BaseLanguageModel, target_clusters: dict[str, list[
     :param verification_message_template: message to ask llms to verify examples.
     :param system_message: system message to ask llms to generate examples. With {} to be replaced by number of examples.
     :param max_retry: max retry to invoke llms
+    :param temperature: temperature of model
     :param logger: logger
     :return: list of dict
     """
@@ -58,9 +60,9 @@ def check_by_themselves(llm: BaseLanguageModel, target_clusters: dict[str, list[
         if isinstance(llm, FakeListLLM):
             positive_examples = eval(llm.invoke(positive_query))
         elif isinstance(llm, ChatOpenAI):
-            positive_examples = invoke_chat(llm, positive_query)
+            positive_examples = invoke_chat(llm, positive_query, temperature=temperature)
         elif isinstance(llm, OpenAI):
-            positive_examples = invoke_completion(llm, positive_query)
+            positive_examples = invoke_completion(llm, positive_query, temperature=temperature)
         else:
             raise ValueError(f"llm: {llm} is not supported")
 
@@ -74,9 +76,9 @@ def check_by_themselves(llm: BaseLanguageModel, target_clusters: dict[str, list[
         if isinstance(llm, FakeListLLM):
             negative_examples = eval(llm.invoke(negative_query))
         elif isinstance(llm, ChatOpenAI):
-            negative_examples = invoke_chat(llm, negative_query)
+            negative_examples = invoke_chat(llm, negative_query, temperature=temperature)
         elif isinstance(llm, OpenAI):
-            negative_examples = invoke_completion(llm, negative_query)
+            negative_examples = invoke_completion(llm, negative_query, temperature=temperature)
         else:
             raise ValueError(f"llm: {llm} is not supported")
 
@@ -174,6 +176,7 @@ def bulk_verification_by_themselves(llm: BaseLanguageModel, target_items: list[s
     :return: list of bool
     """
     result = []
+    temperature = 0.7
 
     query = [system_query, query_template.format(label=label, list=str(target_items))]
     for _ in range(max_retry):
@@ -182,9 +185,9 @@ def bulk_verification_by_themselves(llm: BaseLanguageModel, target_items: list[s
                 label=label, list=str(target_items)
             )]))
         elif isinstance(llm, ChatOpenAI):
-            result = invoke_chat(llm, query)
+            result = invoke_chat(llm, query, temperature=temperature)
         elif isinstance(llm, OpenAI):
-            result = invoke_completion(llm, query)
+            result = invoke_completion(llm, query, temperature=temperature)
         else:
             raise ValueError(f"llm: {llm} is not supported")
         if isinstance(result, list):

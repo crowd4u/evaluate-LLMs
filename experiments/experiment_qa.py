@@ -132,7 +132,8 @@ def execute_experiment(parsed_args, dataset, col_answer="", logger=None, subcol_
                                                           max_retry=parsed_args.max_retry, logger=logger)
             elif verification == "themselves":
                 res = check_by_themselves(llm, label_question, n_sample, pos_q_template, neg_q_template,
-                                          max_retry=parsed_args.max_retry, logger=logger)
+                                          max_retry=parsed_args.max_retry, logger=logger,
+                                          temperature=parsed_args.temperature)
             else:
                 raise ValueError(f"the way of verification: {verification} is not supported")
 

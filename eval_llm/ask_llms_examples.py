@@ -19,6 +19,7 @@ def ask_positive_and_negative_for_class(llm: BaseLanguageModel, target_clusters:
                                         negative_message_template: ChatMessagePromptTemplate,
                                         system_message: SystemMessage = default_system_message,
                                         max_retry: int = 3,
+                                        temperature: float = 0,
                                         logger: logging.Logger = None
                                         ) -> list[dict]:
     """
@@ -37,6 +38,7 @@ def ask_positive_and_negative_for_class(llm: BaseLanguageModel, target_clusters:
         The role should be "user".
     :param system_message: system message to ask llms to generate examples. With {} to be replaced by number of examples.
     :param max_retry: max retry to invoke llms
+    :param temperature: temperature of model
     :param logger: logger
     :return: list of dict
     """
@@ -59,9 +61,9 @@ def ask_positive_and_negative_for_class(llm: BaseLanguageModel, target_clusters:
         if isinstance(llm, FakeListLLM):
             positive_examples = eval(llm.invoke(positive_query))
         elif isinstance(llm, ChatOpenAI):
-            positive_examples = invoke_chat(llm, positive_query, max_retry=max_retry)
+            positive_examples = invoke_chat(llm, positive_query, max_retry=max_retry, temperature=temperature)
         elif isinstance(llm, OpenAI):
-            positive_examples = invoke_completion(llm, positive_query, max_retry=max_retry)
+            positive_examples = invoke_completion(llm, positive_query, max_retry=max_retry, temperature=temperature)
         else:
             raise ValueError(f"llm: {llm} is not supported")
 
@@ -74,9 +76,9 @@ def ask_positive_and_negative_for_class(llm: BaseLanguageModel, target_clusters:
         if isinstance(llm, FakeListLLM):
             negative_examples = eval(llm.invoke(negative_query))
         elif isinstance(llm, ChatOpenAI):
-            negative_examples = invoke_chat(llm, negative_query, max_retry=max_retry)
+            negative_examples = invoke_chat(llm, negative_query, max_retry=max_retry, temperature=temperature)
         elif isinstance(llm, OpenAI):
-            negative_examples = invoke_completion(llm, negative_query, max_retry=max_retry)
+            negative_examples = invoke_completion(llm, negative_query, max_retry=max_retry, temperature=temperature)
         else:
             raise ValueError(f"llm: {llm} is not supported")
 
