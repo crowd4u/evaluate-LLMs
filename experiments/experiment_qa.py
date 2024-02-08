@@ -111,7 +111,7 @@ def execute_experiment(parsed_args, dataset, col_answer="", logger=None, subcol_
                 logger.info(f"topic is empty iter: {idx}")
             else:
                 logger.info(f"topic: {topic}")
-        label_question[topic] = [question]
+        label_question[topic] = label_question.get(topic, []) + [idx]
         if verification == "dataset":
             label_answers[topic] = answers
 
@@ -198,7 +198,7 @@ if __name__ == "__main__":
             "experiment_id": ex_id,
             "args": args,
             "result": result,
-            "topics": list(l_q.keys()),
+            "topics_dict": l_q,
         }
         pickle.dump(save_data, f)
         if logger:
