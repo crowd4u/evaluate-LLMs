@@ -42,6 +42,7 @@ parser.add_argument("--verification", default="themselves", type=str, help="Veri
                     choices=verification_list)
 parser.add_argument("--temperature", default=0.0, type=float, help="Temperature of model")
 parser.add_argument("--n_items", default=0, type=int, help="Number of items to ask. when 0, ask all items")
+parser.add_argument("--random", action="store_true", help="Randomly select items")
 
 
 def get_timestamp():
@@ -177,6 +178,11 @@ if __name__ == "__main__":
         raise ValueError(f"dataset: {target_ds} is not supported")
     if logger:
         logger.info(f"dataset: {target_ds} is loaded. {len(ds)} items.")
+
+    if args.random:
+        ds.shuffle()
+        if logger:
+            logger.info("dataset is shuffled")
 
     # execute experiment
     result = []
