@@ -85,17 +85,19 @@ def check_by_themselves(llm: BaseLanguageModel, target_clusters: dict[str, list[
         if len(negative_examples) == 0 and logger:
             logger.warning(f"negative examples is empty in class: {label}")
 
-        positive_verifications: list[bool] = bulk_verification_by_themselves(llm, positive_examples, label, "Yes",
+        # the number of the True in the positive_verifications is TP
+        positive_verifications: list[bool] = bulk_verification_by_themselves(llm, positive_examples, label,
                                                                              query_template=verification_message_template,
                                                                              max_retry=max_retry, logger=logger)
-        negative_verifications: list[bool] = bulk_verification_by_themselves(llm, negative_examples, label, "No",
+        # the number of the True in the negative_verifications is FN
+        negative_verifications: list[bool] = bulk_verification_by_themselves(llm, negative_examples, label,
                                                                              query_template=verification_message_template,
                                                                              max_retry=max_retry, logger=logger)
         # TP is a number of the True in the positive_verifications
         TP = sum(positive_verifications)
-        TN = sum(negative_verifications)
+        FN = sum(negative_verifications)
         FP = n_sample - TP
-        FN = n_sample - TN
+        TN = n_sample - FN
 
         tmp_result.append({
             "class label": label,
@@ -157,7 +159,6 @@ def verification_by_themselves(llm: BaseLanguageModel, target_items: list[str], 
 
 
 def bulk_verification_by_themselves(llm: BaseLanguageModel, target_items: list[str], label: str,
-                                    judge_str: str = "Yes",
                                     system_query: SystemMessage = bulk_verification_system_message,
                                     query_template: ChatMessagePromptTemplate = bulk_verification_template,
                                     max_retry: int = 3,
@@ -168,7 +169,6 @@ def bulk_verification_by_themselves(llm: BaseLanguageModel, target_items: list[s
     :param llm:
     :param target_items:
     :param label:
-    :param judge_str: if the answer of llms contains judge_str, it is judged as correct.
     :param system_query:
     :param query_template: message to ask llms to verify examples. With two {} to be replaced by label and list.
     :param max_retry: number of retry to invoke llms.
