@@ -17,25 +17,28 @@ def combine_prompt_content(prompt: list[BaseMessage]) -> str:
     return "\n".join([x.content for x in prompt])
 
 
-def invoke_completion(model: OpenAI, prompt: list[BaseMessage], max_retry: int = 3) -> list[str]:
+def invoke_completion(model: OpenAI, prompt: list[BaseMessage], max_retry: int = 3, temperature: float = 0.7) -> list[str]:
     """
     invoke completion with max_retry
 
     :param model:
     :param prompt:
     :param max_retry:
+    :param temperature:
     :return:
     """
     tmp_result = []
     for _ in range(max_retry):
         try:
             # print("prompt", combine_prompt_content(prompt))
-            ai_res = model.invoke(combine_prompt_content(prompt))
+            ai_res = model.invoke(combine_prompt_content(prompt), temperature=temperature)
             # print("res", ai_res)
             if isinstance(ai_res, str):
                 tmp_result = eval(ai_res)
-            else:
+            elif hasattr(ai_res, "content"):
                 tmp_result = eval(ai_res.content)
+            else:
+                raise ValueError(f"This type of response of AI: {type(ai_res)} is not supported")
         except Exception as e:
             print(e)
             pass
@@ -46,23 +49,26 @@ def invoke_completion(model: OpenAI, prompt: list[BaseMessage], max_retry: int =
     return []
 
 
-def invoke_chat(chat: ChatOpenAI, prompt: list[BaseMessage], max_retry: int = 3) -> list[str]:
+def invoke_chat(chat: ChatOpenAI, prompt: list[BaseMessage], max_retry: int = 3, temperature: float = 0.7) -> list[str]:
     """
     invoke chat with max_retry
 
     :param chat:
     :param prompt:
     :param max_retry:
+    :param temperature:
     :return:
     """
     tmp_result = []
     for _ in range(max_retry):
         try:
-            ai_res = chat.invoke(prompt)
+            ai_res = chat.invoke(prompt, temperature=temperature)
             if isinstance(ai_res, str):
                 tmp_result = eval(ai_res)
-            else:
+            elif hasattr(ai_res, "content"):
                 tmp_result = eval(ai_res.content)
+            else:
+                raise ValueError(f"This type of response of AI: {type(ai_res)} is not supported")
         except Exception as e:
             print(e)
             pass
