@@ -23,7 +23,8 @@ load_dotenv()
 dataset_list = ["truthful_qa", "trivia_qa"]
 strategy_list = ["normal", "super"]
 verification_list = ["dataset", "themselves"]
-model_list = ["gpt-3.5-turbo-instruct", "gpt-3.5-turbo", "gpt-3.5-turbo-instruct-0914"]
+local_models = ["llama-2-7b-hf", "llama-2-13b-hf"]
+model_list = ["gpt-3.5-turbo-instruct", "gpt-3.5-turbo", "gpt-3.5-turbo-instruct-0914"] + local_models
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--dataset", default="truthful_qa", type=str, help="Dataset name", choices=dataset_list)
@@ -43,6 +44,7 @@ parser.add_argument("--verification", default="themselves", type=str, help="Veri
 parser.add_argument("--temperature", default=0.0, type=float, help="Temperature of model")
 parser.add_argument("--n_items", default=0, type=int, help="Number of items to ask. when 0, ask all items")
 parser.add_argument("--random", action="store_true", help="Randomly select items")
+parser.add_argument("--optional_url", default="http://192.168.12.26:3050/v1", type=str, help="Optional API URL")
 
 
 def get_timestamp():
@@ -67,7 +69,12 @@ def execute_experiment(parsed_args, dataset, col_answer="", logger=None, subcol_
         if logger:
             logger.info("Test mode")
     else:
-        llm = OpenAI(model=parsed_args.model, max_retries=parsed_args.max_retry, temperature=parsed_args.temperature)
+        if parsed_args.model in local_models:
+            llm = OpenAI(model=parsed_args.model, max_retries=parsed_args.max_retry,
+                         temperature=parsed_args.temperature, base_url=parsed_args.optional_url)
+        else:
+            llm = OpenAI(model=parsed_args.model, max_retries=parsed_args.max_retry,
+                         temperature=parsed_args.temperature)
 
     topic_q_template = ChatMessagePromptTemplate.from_template(role="user", template=query_topic)
 
