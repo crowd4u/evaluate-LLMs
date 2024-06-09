@@ -1,26 +1,18 @@
-from langchain_core.language_models.base import BaseLanguageModel
-from langchain.chat_models import ChatOpenAI
-from langchain.llms.fake import FakeListLLM
-from langchain.llms import OpenAI
-from langchain.schema import SystemMessage
-from langchain.prompts import ChatMessagePromptTemplate
-
-import sys
 import logging
-from pathlib import Path
+
+from openai import OpenAI
 
 from eval_llm.queries import default_system_message, verification_template, bulk_verification_system_message, \
     bulk_verification_template, system_message_for_verification
+from eval_llm.utils import invoke_completion
+from eval_llm.type import SystemMessage, UserMessage
 
-sys.path.append(str(Path(__file__).parent.parent))
-from eval_llm.utils.utils import invoke_completion, invoke_chat
 
-
-def check_by_themselves(llm: BaseLanguageModel, target_clusters: dict[str, list[str]], n_sample: int,
-                        positive_message: ChatMessagePromptTemplate,
-                        negative_message: ChatMessagePromptTemplate,
+def check_by_themselves(model: str, target_clusters: dict[str, list[str]], n_sample: int,
+                        positive_message: UserMessage,
+                        negative_message: UserMessage,
                         system_message: SystemMessage = default_system_message,
-                        verification_message_template: ChatMessagePromptTemplate = bulk_verification_template,
+                        verification_message_template: UserMessage = bulk_verification_template,
                         max_retry: int = 3,
                         temperature: float = 0,
                         logger: logging.Logger = None
@@ -28,7 +20,7 @@ def check_by_themselves(llm: BaseLanguageModel, target_clusters: dict[str, list[
     """
     ask llms to positive and negative examples for a class
 
-    :param llm:
+    :param model:
     :param target_clusters: target label and texts
     :param n_sample:
     :param positive_message: message to ask llms to generate examples.
@@ -46,6 +38,7 @@ def check_by_themselves(llm: BaseLanguageModel, target_clusters: dict[str, list[
     :param logger: logger
     :return: list of dict
     """
+    client = OpenAI()
 
     system_message = SystemMessage(content=system_message.content.format(n_sample))
 
@@ -54,43 +47,35 @@ def check_by_themselves(llm: BaseLanguageModel, target_clusters: dict[str, list[
     for label in target_clusters.keys():
         if logger:
             logger.info(f"Class label: {label}")
-        positive_query = [system_message, positive_message.format(label=label, n_examples=n_sample)]
+        positive_query = [system_message, positive_message.parse(label=label, n_examples=n_sample)]
         positive_examples = []
 
-        if isinstance(llm, FakeListLLM):
-            positive_examples = eval(llm.invoke(positive_query))
-        elif isinstance(llm, ChatOpenAI):
-            positive_examples = invoke_chat(llm, positive_query, temperature=temperature)
-        elif isinstance(llm, OpenAI):
-            positive_examples = invoke_completion(llm, positive_query, temperature=temperature)
+        if isinstance(client, OpenAI):
+            positive_examples = invoke_completion(client, model, positive_query, temperature=temperature)
         else:
-            raise ValueError(f"llm: {llm} is not supported")
+            raise ValueError(f"llm: {client} is not supported")
 
         if len(positive_examples) == 0 and logger:
             logger.warning(f"positive examples is empty in class: {label}")
             continue
 
-        negative_query = [system_message, negative_message.format(label=label, n_examples=n_sample)]
+        negative_query = [system_message, negative_message.parse(label=label, n_examples=n_sample)]
         negative_examples = []
 
-        if isinstance(llm, FakeListLLM):
-            negative_examples = eval(llm.invoke(negative_query))
-        elif isinstance(llm, ChatOpenAI):
-            negative_examples = invoke_chat(llm, negative_query, temperature=temperature)
-        elif isinstance(llm, OpenAI):
-            negative_examples = invoke_completion(llm, negative_query, temperature=temperature)
+        if isinstance(client, OpenAI):
+            negative_examples = invoke_completion(client, model, negative_query, temperature=temperature)
         else:
-            raise ValueError(f"llm: {llm} is not supported")
+            raise ValueError(f"llm: {client} is not supported")
 
         if len(negative_examples) == 0 and logger:
             logger.warning(f"negative examples is empty in class: {label}")
 
         # the number of the True in the positive_verifications is TP
-        positive_verifications: list[bool] = bulk_verification_by_themselves(llm, positive_examples, label,
+        positive_verifications: list[bool] = bulk_verification_by_themselves(client, model, positive_examples, label,
                                                                              query_template=verification_message_template,
                                                                              max_retry=max_retry, logger=logger)
         # the number of the True in the negative_verifications is FN
-        negative_verifications: list[bool] = bulk_verification_by_themselves(llm, negative_examples, label,
+        negative_verifications: list[bool] = bulk_verification_by_themselves(client, model, negative_examples, label,
                                                                              query_template=verification_message_template,
                                                                              max_retry=max_retry, logger=logger)
         # TP is a number of the True in the positive_verifications
@@ -115,16 +100,17 @@ def check_by_themselves(llm: BaseLanguageModel, target_clusters: dict[str, list[
     return tmp_result
 
 
-def verification_by_themselves(llm: BaseLanguageModel, target_items: list[str], label: str,
+def verification_by_themselves(client: OpenAI, model, target_items: list[str], label: str,
                                judge_str: str = "Yes",
                                system_query: SystemMessage = system_message_for_verification,
-                               query_template: ChatMessagePromptTemplate = verification_template,
+                               query_template: UserMessage = verification_template,
                                max_retry: int = 3,
                                logger: logging.Logger = None
                                ) -> list[bool]:
     """
     ask llms to verify examples
-    :param llm:
+    :param client:
+    :param model:
     :param target_items:
     :param label:
     :param judge_str: if the answer of llms contains judge_str, it is judged as correct.
@@ -139,14 +125,10 @@ def verification_by_themselves(llm: BaseLanguageModel, target_items: list[str], 
     for item in target_items:
         answer = ""
         for _ in range(max_retry):
-            if isinstance(llm, FakeListLLM):
-                answer = llm.invoke([system_query, query_template.format(item=item, label=label)])
-            elif isinstance(llm, ChatOpenAI):
-                answer = invoke_chat(llm, [system_query, query_template.format(item=item, label=label)])
-            elif isinstance(llm, OpenAI):
-                answer = invoke_completion(llm, [system_query, query_template.format(item=item, label=label)])
+            if isinstance(client, OpenAI):
+                answer = invoke_completion(client, model, [system_query, query_template.parse(item=item, label=label)])
             else:
-                raise ValueError(f"llm: {llm} is not supported")
+                raise ValueError(f"llm: {client} is not supported")
             if answer == "":
                 if logger:
                     logger.warning("answer is empty")
@@ -158,15 +140,16 @@ def verification_by_themselves(llm: BaseLanguageModel, target_items: list[str], 
     return result
 
 
-def bulk_verification_by_themselves(llm: BaseLanguageModel, target_items: list[str], label: str,
+def bulk_verification_by_themselves(client: OpenAI, model: str, target_items: list[str], label: str,
                                     system_query: SystemMessage = bulk_verification_system_message,
-                                    query_template: ChatMessagePromptTemplate = bulk_verification_template,
+                                    query_template: UserMessage = bulk_verification_template,
                                     max_retry: int = 3,
                                     logger: logging.Logger = None
                                     ) -> list[bool]:
     """
     ask llms to verify examples (ask at one time)
-    :param llm:
+    :param client:
+    :param model:
     :param target_items:
     :param label:
     :param system_query:
@@ -178,18 +161,12 @@ def bulk_verification_by_themselves(llm: BaseLanguageModel, target_items: list[s
     result = []
     temperature = 0.7
 
-    query = [system_query, query_template.format(label=label, list=str(target_items))]
+    query = [system_query, query_template.parse(label=label, list=str(target_items))]
     for _ in range(max_retry):
-        if isinstance(llm, FakeListLLM):
-            result = eval(llm.invoke([system_query, query_template.format(
-                label=label, list=str(target_items)
-            )]))
-        elif isinstance(llm, ChatOpenAI):
-            result = invoke_chat(llm, query, temperature=temperature)
-        elif isinstance(llm, OpenAI):
-            result = invoke_completion(llm, query, temperature=temperature)
+        if isinstance(client, OpenAI):
+            result = invoke_completion(client, model, query, temperature=temperature)
         else:
-            raise ValueError(f"llm: {llm} is not supported")
+            raise ValueError(f"llm: {client} is not supported")
         if isinstance(result, list):
             # all item in result must be bool
             if all([isinstance(x, bool) for x in result]):

@@ -3,20 +3,16 @@ import logging
 import pickle
 import hashlib
 import time
-from pathlib import Path
-import sys
 
 import argparse
-from langchain.llms import OpenAI
-from langchain.llms.fake import FakeListLLM
-from langchain.prompts import ChatMessagePromptTemplate
+from argparse import Namespace
 from datasets import load_dataset
 from dotenv import load_dotenv
 
-sys.path.append(str(Path(__file__).parent.parent))
 from eval_llm.ask_llms_examples import ask_positive_and_negative_for_class
 from eval_llm.check_by_themselves import check_by_themselves
 from eval_llm.queries import query_positive, query_negative, query_negative_super
+from eval_llm.type import UserMessage
 
 load_dotenv()
 
@@ -33,36 +29,25 @@ parser.add_argument("--model", default="gpt-3.5-turbo-instruct", type=str, help=
                     choices=["gpt-3.5-turbo-instruct"])
 parser.add_argument("--logging", default=True, type=bool, help="Logging to stdout")
 parser.add_argument("--max_retry", default=3, type=int, help="Max retry to invoke llms")
-parser.add_argument("--test", help="Test mode", action="store_true")
 parser.add_argument("--strategy", default="normal", type=str, help="Strategy to ask llms",
                     choices=strategy_list)
 parser.add_argument("--verification", default="dataset", type=str, help="Verification method",
                     choices=verification_list)
-args = parser.parse_args()
 
 
 def get_timestamp():
     return str(time.time()).split('.')[0]
 
 
-def execute_experiment(args, logger):
+def execute_experiment(args: Namespace, logger: logging.Logger):
     verification = args.verification
 
-    is_test = args.test
-    llm = None
-    if is_test:
-        llm = FakeListLLM(responses=['["yes"]', '["no"]'])
-        if logger:
-            logger.info("Test mode")
-    else:
-        llm = OpenAI(model=args.model, max_retries=args.max_retry)
-
     if args.strategy == "super":
-        pos_q_template = ChatMessagePromptTemplate.from_template(role="user", template=query_positive)
-        neg_q_template = ChatMessagePromptTemplate.from_template(role="user", template=query_negative_super)
+        pos_q_template = UserMessage(content=query_positive)
+        neg_q_template = UserMessage(content=query_negative_super)
     elif args.strategy == "normal":
-        pos_q_template = ChatMessagePromptTemplate.from_template(role="user", template=query_positive)
-        neg_q_template = ChatMessagePromptTemplate.from_template(role="user", template=query_negative)
+        pos_q_template = UserMessage(content=query_positive)
+        neg_q_template = UserMessage(content=query_negative)
     else:
         raise ValueError(f"strategy: {args.strategy} is not supported")
 
@@ -86,11 +71,12 @@ def execute_experiment(args, logger):
                 logger.info(f"trial: {trial_iter}/{n_trials}")
             res = []
             if verification == "dataset":
-                res = ask_positive_and_negative_for_class(llm, clusters, n_sample, pos_q_template, neg_q_template,
-                                                          max_retry=args.max_retry)
+                res = ask_positive_and_negative_for_class(args.model, clusters, n_sample, pos_q_template,
+                                                          neg_q_template, max_retry=args.max_retry,
+                                                          temperature=args.temperature)
             elif verification == "themselves":
-                res = check_by_themselves(llm, clusters, n_sample, pos_q_template, neg_q_template,
-                                          max_retry=args.max_retry)
+                res = check_by_themselves(args.model, clusters, n_sample, pos_q_template, neg_q_template,
+                                          max_retry=args.max_retry, temperature=args.temperature)
             else:
                 raise ValueError(f"the way of verification: {verification} is not supported")
             if len(res) != n_label:

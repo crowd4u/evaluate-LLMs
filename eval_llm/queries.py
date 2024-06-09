@@ -1,5 +1,4 @@
-from langchain_core.messages import SystemMessage
-from langchain_core.prompts import ChatMessagePromptTemplate
+from eval_llm.type import SystemMessage, UserMessage
 
 query_positive = "Please pick up some examples of {label}. You need to pick up {n_examples} examples."
 query_negative = "Please pick up some examples which are not {label}. You need to pick up {n_examples} examples."
@@ -8,8 +7,8 @@ query_topic = "Please pick up the topic of the class of the following statements
 default_system_message = SystemMessage(
     content='''You should answer with the literal of list of Python with all string item. For example, ["example1", "example's 2", "3 examples"].'''
 )
-verification_message = "The {item} is a kind of {label}?"
-verification_template = ChatMessagePromptTemplate.from_template(role="user", template=verification_message)
+verification_message = "The ${item} is a kind of ${label}?"
+verification_template = UserMessage(content=verification_message)
 bulk_verification_system_message = SystemMessage(
     content='''
     You should answer with the literal of list of the programming language, Python and its contents should be list of `bool`.
@@ -20,5 +19,5 @@ bulk_verification_system_message = SystemMessage(
 bulk_verification_user_message = """The items in the following list are a kind of {label}?
 list: {list}
 """
-bulk_verification_template = ChatMessagePromptTemplate.from_template(role="user", template=bulk_verification_user_message)
+bulk_verification_template = UserMessage(content=bulk_verification_user_message)
 system_message_for_verification = SystemMessage(content="Please answer with 'Yes' or 'No', without no other words.")

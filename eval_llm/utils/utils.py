@@ -1,77 +1,54 @@
-from langchain.llms import OpenAI
-from langchain_community.chat_models import ChatOpenAI
-from langchain_core.messages import BaseMessage
+from openai import OpenAI
+from openai.types.chat import ChatCompletion
+import openai
+
+from eval_llm.type.type import BaseMessage
+
+
+def to_the_dicts(messages: list[BaseMessage]) -> list[dict]:
+    return [x.to_dict() for x in messages]
 
 
 def in_the_list(example: str, cluster: list[str]) -> bool:
     return any((example in item or item in example) for item in set(cluster))
 
 
-def combine_prompt_content(prompt: list[BaseMessage]) -> str:
-    """
-    combine prompt content to one string
-
-    :param prompt:
-    :return:
-    """
-    return "\n".join([x.content for x in prompt])
-
-
-def invoke_completion(model: OpenAI, prompt: list[BaseMessage], max_retry: int = 3, temperature: float = 0.7) -> list[str]:
+def invoke_completion(client: OpenAI, model: str, prompt: list[BaseMessage], max_retry: int = 3,
+                      temperature: float = 0.7, target_errors: tuple = (openai.RateLimitError,)) -> list[any]:
     """
     invoke completion with max_retry
 
+    :param client:
     :param model:
     :param prompt:
     :param max_retry:
     :param temperature:
+    :param target_errors:
     :return:
     """
     tmp_result = []
     for _ in range(max_retry):
         try:
             # print("prompt", combine_prompt_content(prompt))
-            ai_res = model.invoke(combine_prompt_content(prompt), temperature=temperature)
+            # ai_res = model.invoke(combine_prompt_content(prompt), temperature=temperature)
+            ai_res = client.chat.completions.create(
+                model=model,
+                messages=to_the_dicts(prompt),
+                temperature=temperature
+            )
             # print("res", ai_res)
-            if isinstance(ai_res, str):
-                tmp_result = eval(ai_res)
-            elif hasattr(ai_res, "content"):
-                tmp_result = eval(ai_res.content)
+            if isinstance(ai_res, ChatCompletion):
+                tmp_result = eval(ai_res.choices[0].message.content)
             else:
                 raise ValueError(f"This type of response of AI: {type(ai_res)} is not supported")
-        except Exception as e:
+        except target_errors as e:
             print(e)
-            pass
-        if isinstance(tmp_result, list):
-            return tmp_result
-        else:
+            print("continue")
             continue
-    return []
-
-
-def invoke_chat(chat: ChatOpenAI, prompt: list[BaseMessage], max_retry: int = 3, temperature: float = 0.7) -> list[str]:
-    """
-    invoke chat with max_retry
-
-    :param chat:
-    :param prompt:
-    :param max_retry:
-    :param temperature:
-    :return:
-    """
-    tmp_result = []
-    for _ in range(max_retry):
-        try:
-            ai_res = chat.invoke(prompt, temperature=temperature)
-            if isinstance(ai_res, str):
-                tmp_result = eval(ai_res)
-            elif hasattr(ai_res, "content"):
-                tmp_result = eval(ai_res.content)
-            else:
-                raise ValueError(f"This type of response of AI: {type(ai_res)} is not supported")
         except Exception as e:
             print(e)
-            pass
+            print("abort this trial")
+            return []
         if isinstance(tmp_result, list):
             return tmp_result
         else:

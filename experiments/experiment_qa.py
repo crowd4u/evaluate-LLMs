@@ -3,20 +3,18 @@ import logging
 import pickle
 import hashlib
 import time
-from pathlib import Path
-import sys
 
 import argparse
-from langchain.llms import OpenAI
-from langchain.llms.fake import FakeListLLM
-from langchain.prompts import ChatMessagePromptTemplate
+from argparse import Namespace
 from datasets import load_dataset
 from dotenv import load_dotenv
+from openai import OpenAI
+from openai.types.chat import ChatCompletion
 
-sys.path.append(str(Path(__file__).parent.parent))
 from eval_llm.ask_llms_examples import ask_positive_and_negative_for_class
 from eval_llm.check_by_themselves import check_by_themselves
 from eval_llm.queries import query_positive, query_negative, query_negative_super, query_topic
+from eval_llm.type import UserMessage
 
 load_dotenv()
 
@@ -36,7 +34,6 @@ parser.add_argument("--n_sample_step", default=5, type=int, help="Number of samp
 parser.add_argument("--model", default="gpt-3.5-turbo-instruct-0914", type=str, help="Model name", choices=model_list)
 parser.add_argument("--logging", default=True, type=bool, help="Logging to stdout")
 parser.add_argument("--max_retry", default=3, type=int, help="Max retry to invoke llms")
-parser.add_argument("--test", action="store_true", help="Test mode")
 parser.add_argument("--strategy", default="normal", type=str, help="Strategy to ask llms",
                     choices=strategy_list)
 parser.add_argument("--verification", default="themselves", type=str, help="Verification method",
@@ -51,7 +48,8 @@ def get_timestamp():
     return str(time.time()).split('.')[0]
 
 
-def execute_experiment(parsed_args, dataset, col_answer="", logger=None, subcol_answer=""):
+def execute_experiment(parsed_args: Namespace, dataset, col_answer: str = "", logger: logging.Logger = None,
+                       subcol_answer: str = ""):
     """
 
     :param parsed_args:
@@ -63,27 +61,14 @@ def execute_experiment(parsed_args, dataset, col_answer="", logger=None, subcol_
     """
     verification = parsed_args.verification
 
-    llm = None
-    if parsed_args.test:
-        llm = FakeListLLM(responses=['["yes"]', '["no"]'])
-        if logger:
-            logger.info("Test mode")
-    else:
-        if parsed_args.model in local_models:
-            llm = OpenAI(model=parsed_args.model, max_retries=parsed_args.max_retry,
-                         temperature=parsed_args.temperature, base_url=parsed_args.optional_url)
-        else:
-            llm = OpenAI(model=parsed_args.model, max_retries=parsed_args.max_retry,
-                         temperature=parsed_args.temperature)
-
-    topic_q_template = ChatMessagePromptTemplate.from_template(role="user", template=query_topic)
+    topic_q_template = UserMessage(content=query_topic)
 
     if parsed_args.strategy == "super":
-        pos_q_template = ChatMessagePromptTemplate.from_template(role="user", template=query_positive)
-        neg_q_template = ChatMessagePromptTemplate.from_template(role="user", template=query_negative_super)
+        pos_q_template = UserMessage(content=query_positive)
+        neg_q_template = UserMessage(content=query_negative_super)
     elif parsed_args.strategy == "normal":
-        pos_q_template = ChatMessagePromptTemplate.from_template(role="user", template=query_positive)
-        neg_q_template = ChatMessagePromptTemplate.from_template(role="user", template=query_negative)
+        pos_q_template = UserMessage(content=query_positive)
+        neg_q_template = UserMessage(content=query_negative)
     else:
         raise ValueError(f"strategy: {parsed_args.strategy} is not supported")
 
@@ -94,10 +79,13 @@ def execute_experiment(parsed_args, dataset, col_answer="", logger=None, subcol_
     # get labels from model
     label_question = {}
     label_answers = {}
+    llm = OpenAI()
+
     for idx, row in enumerate(dataset):
-        if args.n_items > 0 and idx >= args.n_items:
+        if 0 < args.n_items <= idx:
             break
         question = row["question"]
+        answers = []
         if verification == "dataset":
             if subcol_answer == "":
                 answers = row[col_answer]
@@ -105,13 +93,15 @@ def execute_experiment(parsed_args, dataset, col_answer="", logger=None, subcol_
                 answers = row[col_answer][subcol_answer]
         if parsed_args.logging:
             logging.info(f"question: {question}")
-        query = [topic_q_template.format(question=question)]
-        ai_res = llm.invoke(query)
+        query = [topic_q_template.parse(question=question)]
+        ai_res = llm.chat.completions.create(
+            model=parsed_args.model,
+            messages=[x.to_dict() for x in query],
+            temperature=parsed_args.temperature
+        )
         topic = ""
-        if isinstance(ai_res, str):
-            topic = ai_res
-        elif hasattr(ai_res, "content"):
-            topic = ai_res.content
+        if isinstance(ai_res, ChatCompletion):
+            topic = eval(ai_res.choices[0].message.content)
         else:
             raise ValueError(f"This type of response of AI: {type(ai_res)} is not supported")
         if logger:
@@ -136,10 +126,11 @@ def execute_experiment(parsed_args, dataset, col_answer="", logger=None, subcol_
                 logger.info(f"trial: {trial_iter}/{n_trials}")
             res = []
             if verification == "dataset":
-                res = ask_positive_and_negative_for_class(llm, label_answers, n_sample, pos_q_template, neg_q_template,
-                                                          max_retry=parsed_args.max_retry, logger=logger)
+                res = ask_positive_and_negative_for_class(parsed_args.model, label_answers, n_sample, pos_q_template,
+                                                          neg_q_template, max_retry=parsed_args.max_retry,
+                                                          logger=logger, temperature=args.temperature)
             elif verification == "themselves":
-                res = check_by_themselves(llm, label_question, n_sample, pos_q_template, neg_q_template,
+                res = check_by_themselves(parsed_args.model, label_question, n_sample, pos_q_template, neg_q_template,
                                           max_retry=parsed_args.max_retry, logger=logger,
                                           temperature=parsed_args.temperature)
             else:
