@@ -14,7 +14,8 @@ def in_the_list(example: str, cluster: list[str]) -> bool:
 
 
 def invoke_completion(client: OpenAI, model: str, prompt: list[BaseMessage], max_retry: int = 3,
-                      temperature: float = 0.7, target_errors: tuple = (openai.RateLimitError,)) -> list[any]:
+                      temperature: float = 0.7, target_errors: tuple = (openai.RateLimitError,), raw: bool = False
+                      ) -> list[any] | str:
     """
     invoke completion with max_retry
 
@@ -24,6 +25,7 @@ def invoke_completion(client: OpenAI, model: str, prompt: list[BaseMessage], max
     :param max_retry:
     :param temperature:
     :param target_errors:
+    :param raw:
     :return:
     """
     tmp_result = []
@@ -34,11 +36,15 @@ def invoke_completion(client: OpenAI, model: str, prompt: list[BaseMessage], max
             ai_res = client.chat.completions.create(
                 model=model,
                 messages=to_the_dicts(prompt),
-                temperature=temperature
+                temperature=temperature,
+                stop=["<|im_end|>"],
             )
             # print("res", ai_res)
             if isinstance(ai_res, ChatCompletion):
-                tmp_result = eval(ai_res.choices[0].message.content)
+                tmp = ai_res.choices[0].message.content
+                if raw:
+                    return tmp
+                tmp_result = eval(tmp)
             else:
                 raise ValueError(f"This type of response of AI: {type(ai_res)} is not supported")
         except target_errors as e:

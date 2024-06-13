@@ -15,13 +15,14 @@ from eval_llm.ask_llms_examples import ask_positive_and_negative_for_class
 from eval_llm.check_by_themselves import check_by_themselves
 from eval_llm.queries import query_positive, query_negative, query_negative_super, query_topic
 from eval_llm.type import UserMessage
+from eval_llm.models import local_model_list
 
 load_dotenv()
 
 dataset_list = ["truthful_qa", "trivia_qa"]
 strategy_list = ["normal", "super"]
 verification_list = ["dataset", "themselves"]
-local_models = ["llama-2-7b-hf", "llama-2-13b-hf"]
+local_models = local_model_list
 model_list = ["gpt-3.5-turbo-instruct", "gpt-3.5-turbo", "gpt-3.5-turbo-instruct-0914"] + local_models
 
 parser = argparse.ArgumentParser()
@@ -41,7 +42,6 @@ parser.add_argument("--verification", default="themselves", type=str, help="Veri
 parser.add_argument("--temperature", default=0.0, type=float, help="Temperature of model")
 parser.add_argument("--n_items", default=0, type=int, help="Number of items to ask. when 0, ask all items")
 parser.add_argument("--random", action="store_true", help="Randomly select items")
-parser.add_argument("--optional_url", default="http://192.168.12.26:3050/v1", type=str, help="Optional API URL")
 
 
 def get_timestamp():
