@@ -1,5 +1,5 @@
-from type import (
-UserMessage,
-SystemMessage,
-BaseMessage,
+from .type import (
+    UserMessage,
+    SystemMessage,
+    BaseMessage,
 )

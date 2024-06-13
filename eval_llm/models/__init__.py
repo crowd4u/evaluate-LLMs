@@ -1,1 +1,5 @@
-from models import get_client, available
+from .models import (
+    get_client,
+    available,
+    local_model_list
+)

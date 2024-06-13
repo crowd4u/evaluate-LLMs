@@ -5,6 +5,7 @@ description = ""
 authors = ["Tomoya Kanda <tomoya.kanda.2022b@mlab.info>"]
 license = "MIT"
 readme = "README.md"
+packages = [{ include = "eval_llm"}]
 
 [tool.poetry.dependencies]
 python = "^3.12"
