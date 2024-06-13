@@ -2,10 +2,13 @@ import logging
 
 from openai import OpenAI
 
-from eval_llm.queries import default_system_message, verification_template, bulk_verification_system_message, \
-    bulk_verification_template, system_message_for_verification
+from eval_llm.queries import (
+    default_system_message, verification_template, bulk_verification_system_message, bulk_verification_template,
+    system_message_for_verification
+)
 from eval_llm.utils import invoke_completion
 from eval_llm.type import SystemMessage, UserMessage
+from eval_llm.models import available, get_client
 
 
 def check_by_themselves(model: str, target_clusters: dict[str, list[str]], n_sample: int,
@@ -38,7 +41,9 @@ def check_by_themselves(model: str, target_clusters: dict[str, list[str]], n_sam
     :param logger: logger
     :return: list of dict
     """
-    client = OpenAI()
+    if not available(model):
+        raise ValueError(f"model: {model} is not available")
+    client = get_client(model)
 
     system_message = SystemMessage(content=system_message.content.format(n_sample))
 
@@ -48,24 +53,14 @@ def check_by_themselves(model: str, target_clusters: dict[str, list[str]], n_sam
         if logger:
             logger.info(f"Class label: {label}")
         positive_query = [system_message, positive_message.parse(label=label, n_examples=n_sample)]
-        positive_examples = []
-
-        if isinstance(client, OpenAI):
-            positive_examples = invoke_completion(client, model, positive_query, temperature=temperature)
-        else:
-            raise ValueError(f"llm: {client} is not supported")
+        positive_examples = invoke_completion(client, model, positive_query, temperature=temperature)
 
         if len(positive_examples) == 0 and logger:
             logger.warning(f"positive examples is empty in class: {label}")
             continue
 
         negative_query = [system_message, negative_message.parse(label=label, n_examples=n_sample)]
-        negative_examples = []
-
-        if isinstance(client, OpenAI):
-            negative_examples = invoke_completion(client, model, negative_query, temperature=temperature)
-        else:
-            raise ValueError(f"llm: {client} is not supported")
+        negative_examples = invoke_completion(client, model, negative_query, temperature=temperature)
 
         if len(negative_examples) == 0 and logger:
             logger.warning(f"negative examples is empty in class: {label}")
