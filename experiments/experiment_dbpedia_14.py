@@ -93,7 +93,7 @@ if __name__ == "__main__":
     datetime = time.strftime("%Y%m%d%H%M%S")
     result_file_name = f"dbpedia_14-{datetime}_{ex_id}.pickle"
     log_file_name = f"dbpedia_14-{datetime}_{ex_id}.log"
-    file_path = "./results/test/" if args.test else "./results/"
+    file_path = "./results/"
     file_path += args.group_id + "/"
     os.makedirs(file_path, exist_ok=True)
 

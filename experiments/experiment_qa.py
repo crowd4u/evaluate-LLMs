@@ -8,14 +8,13 @@ import argparse
 from argparse import Namespace
 from datasets import load_dataset
 from dotenv import load_dotenv
-from openai import OpenAI
 from openai.types.chat import ChatCompletion
 
 from eval_llm.ask_llms_examples import ask_positive_and_negative_for_class
 from eval_llm.check_by_themselves import check_by_themselves
 from eval_llm.queries import query_positive, query_negative, query_negative_super, query_topic
 from eval_llm.type import UserMessage
-from eval_llm.models import local_model_list
+from eval_llm.models import local_model_list, get_client, available
 
 load_dotenv()
 
@@ -79,7 +78,10 @@ def execute_experiment(parsed_args: Namespace, dataset, col_answer: str = "", lo
     # get labels from model
     label_question = {}
     label_answers = {}
-    llm = OpenAI()
+
+    if not available(parsed_args.model):
+        raise ValueError(f"model: {parsed_args.model} is not available")
+    llm = get_client(parsed_args.model)
 
     for idx, row in enumerate(dataset):
         if 0 < args.n_items <= idx:
@@ -97,11 +99,15 @@ def execute_experiment(parsed_args: Namespace, dataset, col_answer: str = "", lo
         ai_res = llm.chat.completions.create(
             model=parsed_args.model,
             messages=[x.to_dict() for x in query],
-            temperature=parsed_args.temperature
+            temperature=parsed_args.temperature,
+            stop=["<|im_end|>"],
         )
         topic = ""
         if isinstance(ai_res, ChatCompletion):
-            topic = eval(ai_res.choices[0].message.content)
+            try:
+                topic = eval(ai_res.choices[0].message.content)
+            except:
+                topic = ai_res.choices[0].message.content
         else:
             raise ValueError(f"This type of response of AI: {type(ai_res)} is not supported")
         if logger:
@@ -150,7 +156,7 @@ if __name__ == "__main__":
     datetime = time.strftime("%Y%m%d%H%M%S")
     result_file_name = f"{target_ds}-{datetime}_{ex_id}.pickle"
     log_file_name = f"{target_ds}-{datetime}_{ex_id}.log"
-    file_path = "./results/test/" if args.test else "./results/"
+    file_path = "./results/"
     file_path += args.group_id + "/"
     os.makedirs(file_path, exist_ok=True)
 
