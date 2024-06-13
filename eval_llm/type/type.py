@@ -11,7 +11,8 @@ class BaseMessage:
         return {"content": self.content, "role": self.role}
 
     def parse(self, **kwargs):
-        return self.template.substitute(**kwargs)
+        self.content = self.template.substitute(**kwargs)
+        return self
 
 
 class SystemMessage(BaseMessage):
