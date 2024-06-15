@@ -100,14 +100,13 @@ def execute_experiment(parsed_args: Namespace, dataset, col_answer: str = "", lo
             model=parsed_args.model,
             messages=[x.to_dict() for x in query],
             temperature=parsed_args.temperature,
-            stop=["<|im_end|>"],
         )
         topic = ""
         if isinstance(ai_res, ChatCompletion):
             try:
-                topic = eval(ai_res.choices[0].message.content)
+                topic = eval(ai_res.choices[0].message.content.strip())
             except:
-                topic = ai_res.choices[0].message.content
+                topic = ai_res.choices[0].message.content.strip()
         else:
             raise ValueError(f"This type of response of AI: {type(ai_res)} is not supported")
         if logger:

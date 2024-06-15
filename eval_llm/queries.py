@@ -7,6 +7,9 @@ query_topic = "Please pick up the topic of the class of the following statements
 default_system_message = SystemMessage(
     content='''You should answer with the literal of list of Python with all string item. For example, ["example1", "example's 2", "3 examples"].'''
 )
+system_message_2 = SystemMessage(
+    content='''You are an informative AI assitant who only answers in the follwing format: {}.'''
+)
 verification_message = "The ${item} is a kind of ${label}?"
 verification_template = UserMessage(content=verification_message)
 bulk_verification_system_message = SystemMessage(

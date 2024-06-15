@@ -3,7 +3,7 @@ import openai
 
 
 local_model_base_url = {
-    "llama-2-7b-hf": "http://192.168.12.26:3050/v1/",
+    "llama-2-7b-chat-hf": "http://192.168.12.26:3050/v1/",
 }
 
 local_model_list = list(local_model_base_url.keys())

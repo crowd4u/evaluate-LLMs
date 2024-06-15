@@ -37,14 +37,13 @@ def invoke_completion(client: OpenAI, model: str, prompt: list[BaseMessage], max
                 model=model,
                 messages=to_the_dicts(prompt),
                 temperature=temperature,
-                stop=["<|im_end|>"],
             )
             # print("res", ai_res)
             if isinstance(ai_res, ChatCompletion):
                 tmp = ai_res.choices[0].message.content
                 if raw:
                     return tmp
-                tmp_result = eval(tmp)
+                tmp_result = eval(tmp.strip())
             else:
                 raise ValueError(f"This type of response of AI: {type(ai_res)} is not supported")
         except target_errors as e:
@@ -54,6 +53,8 @@ def invoke_completion(client: OpenAI, model: str, prompt: list[BaseMessage], max
         except Exception as e:
             print(e)
             print("abort this trial")
+            print("prompt:", to_the_dicts(prompt))
+            print("response:", ai_res.choices[0].message.content)
             return []
         if isinstance(tmp_result, list):
             return tmp_result
